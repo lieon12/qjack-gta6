@@ -1,9 +1,10 @@
 // A working gta6-01 entry (Node 22, standard library only): the game is this directory's
 // game/ folder, plain static files a desktop browser loads offline (game/index.html and its ES
 // modules, no library and no network request), and the program hands it in. It copies game/ from
-// beside this file to /output, decodes the base64 screenshots in shots-b64/ back to real image
-// files in /output/screenshots/ (the repository carries text only, so the images travel as base64),
-// and writes /output/dossier.json, the summary the judge reads, with the vendored make.fun library. Only the plumbing, not an open world: Block
+// beside this file to /output, turns the base64 screenshot texts in shots-b64/ back into real
+// image files in /output/screenshots/ (the images travel as base64 because the repository holds
+// text only), and writes /output/dossier.json, the summary the judge reads, with the vendored
+// make.fun library. Only the plumbing, not an open world: Block
 // Dodger, a plain 2D canvas game where a paddle dodges falling blocks and catches coins, with a
 // title screen, score, lives and levels, game over and restart, flat colours and no sound. Build
 // your own open-world crime game in its place (three.js or any library you vendor under game/),
@@ -25,12 +26,15 @@ const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
 
-// Screenshots are stored in the repository as base64 text (shots-b64/*.b64) because the push
-// path carries text only; decode each one back to the real image file in /output/screenshots/.
+// The screenshots travel as base64 text (shots-b64/*.b64) because the repository
+// holds text only. Turn each one back into a real image file under
+// /output/screenshots/ at grade time.
 mkdirSync(join(out, 'screenshots'), { recursive: true });
-for (const name of readdirSync(join(here, 'shots-b64'))) {
-  if (!name.endsWith('.b64')) continue;
-  writeFileSync(join(out, 'screenshots', name.slice(0, -4)), Buffer.from(readFileSync(join(here, 'shots-b64', name), 'utf8').trim(), 'base64'));
+for (const file of readdirSync(join(here, 'shots-b64'))) {
+  if (!file.endsWith('.b64')) continue;
+  const image = file.slice(0, -'.b64'.length);
+  const bytes = Buffer.from(readFileSync(join(here, 'shots-b64', file), 'utf8').trim(), 'base64');
+  writeFileSync(join(out, 'screenshots', image), bytes);
 }
 
 // The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
