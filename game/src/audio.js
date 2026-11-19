@@ -89,6 +89,28 @@ export class AudioEngine {
     } catch { /* ignore */ }
   }
 
+  // Taxi fare paid: a cheerful two-note chime. Helicopter alert: a low thump.
+  fare() { this._blip(880, 0.1); setTimeout(() => this._blip(1318, 0.16), 90); }
+  heliAlert() { this._blip(110, 0.25, 'sawtooth', 0.07); setTimeout(() => this._blip(110, 0.25, 'sawtooth', 0.07), 260); }
+  setHeli(on) {
+    if (!this.ctx) return;
+    try {
+      if (on && !this._heliOsc) {
+        this._heliOsc = this.ctx.createOscillator();
+        this._heliOsc.type = 'square';
+        this._heliOsc.frequency.value = 38;
+        this._heliGain = this.ctx.createGain();
+        this._heliGain.gain.value = 0.02;
+        this._heliOsc.connect(this._heliGain).connect(this.ctx.destination);
+        this._heliOsc.start();
+      } else if (!on && this._heliOsc) {
+        this._heliGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.2);
+        const osc = this._heliOsc;
+        setTimeout(() => { try { osc.stop(); } catch { /* already stopped */ } }, 600);
+        this._heliOsc = null;
+      }
+    } catch { /* rotor sound is decoration; never break the game */ }
+  }
   shoot() { this._noise(0.12, 0.16); this._blip(160, 0.08, 'square', 0.05); }
   punch() { this._noise(0.07, 0.1); this._blip(90, 0.09, 'sine', 0.09); }
   crash() { this._noise(0.25, 0.14); }

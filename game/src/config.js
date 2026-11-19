@@ -15,7 +15,34 @@ export const DISTRICTS = [
   { name: 'Docks', x: 2800, y: 0, w: 800, h: 600, tint: '#8a97a3' },
   { name: 'Beachfront', x: 0, y: 1800, w: 3600, h: 580, tint: '#f2d8a0' },
   { name: 'Parkside', x: 1300, y: 1000, w: 1000, h: 400, tint: '#7fb069' },
+  // Revision districts: the neon Strip, the Casino row and the Marina piers.
+  { name: 'Strip', x: 1800, y: 1300, w: 1000, h: 500, tint: '#e86fb8' },
+  { name: 'Casino', x: 2300, y: 500, w: 1000, h: 500, tint: '#ffd34e' },
+  { name: 'Marina', x: 2800, y: 1800, w: 800, h: 580, tint: '#7fc4d9' },
 ];
+
+export const STRIP = { x: 1800, y: 1300, w: 1000, h: 500 };
+export const CASINO_ROW = { x: 2300, y: 500, w: 1000, h: 500 };
+export const MARINA = { x: 2800, y: 1800, w: 800, h: 580 };
+
+// Six distinct vehicle models: different speed, acceleration, handling and look.
+export const VEHICLE_MODELS = [
+  { id: 'comet', name: 'Comet GT', max: 520, accel: 390, turn: 3.1, len: 42, w: 20, color: '#f2c14e', stripe: '#d94f3d' },
+  { id: 'sedan', name: 'Solmar Sedan', max: 380, accel: 300, turn: 2.4, len: 40, w: 20, color: '#3d7bd9', stripe: '#e8e8e8' },
+  { id: 'van', name: 'Bay Van', max: 320, accel: 240, turn: 2.0, len: 48, w: 22, color: '#7fb069', stripe: '#e8e8e8' },
+  { id: 'limo', name: 'Tiburon Limo', max: 400, accel: 280, turn: 2.2, len: 54, w: 20, color: '#1d3557', stripe: '#ffd34e' },
+  { id: 'speedster', name: 'Marina Speedster', max: 560, accel: 430, turn: 3.3, len: 42, w: 19, color: '#e86fb8', stripe: '#ffffff' },
+  { id: 'taxi', name: 'City Taxi', max: 410, accel: 320, turn: 2.6, len: 40, w: 20, color: '#f2c14e', stripe: '#1a1a1a' },
+];
+
+// Weather: each type changes grip (driving) and visibility (rendering).
+export const WEATHER_TYPES = [
+  { id: 'clear', label: 'Clear', grip: 1.0, vis: 1.0, rain: false },
+  { id: 'cloudy', label: 'Cloudy', grip: 0.95, vis: 0.95, rain: false },
+  { id: 'rain', label: 'Rain', grip: 0.72, vis: 0.8, rain: true },
+  { id: 'fog', label: 'Fog', grip: 0.88, vis: 0.55, rain: false },
+];
+export const DAY_LENGTH_SEC = 480; // one full in-game day lasts 480 real seconds
 
 // Named places the missions and the HUD refer to.
 export const PLACES = {
@@ -28,6 +55,11 @@ export const PLACES = {
   hospital: { x: 550, y: 1250, name: 'Solmar General' },
   bank: { x: 1050, y: 1050, name: 'Solmar Trust Bank' },
   beach: { x: 2000, y: 2440, name: 'Solmar Beach' },
+  casino: { x: 2800, y: 600, name: 'Solmar Grand Casino' },
+  strip: { x: 2300, y: 1400, name: 'The Strip' },
+  marina: { x: 3300, y: 2200, name: 'Solmar Marina' },
+  taxiStand: { x: 1300, y: 600, name: 'Taxi Stand' },
+  tiburonLair: { x: 3300, y: 1000, name: 'Tiburon Lair' },
   playerSpawn: { x: 1500, y: 900 },
 };
 
@@ -80,5 +112,11 @@ export const TUNE = {
   wantedDecayPerSec: 1.2,
   wantedPerStar: 20,
   bustedHoldSec: 2.5,
-  missionReward: [400, 600, 800, 1000, 2500],
+  missionReward: [400, 600, 800, 1000, 2500, 1200, 1500, 3000],
+  dayLengthSec: 480,
+  heliSpeed: 260,
+  heliSpotRange: 320,
+  taxiBaseFare: 40,
+  taxiPerMetre: 0.35,
+  taxiTimeLimit: 120,
 };

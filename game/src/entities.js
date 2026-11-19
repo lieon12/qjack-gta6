@@ -1,17 +1,42 @@
 // Cars, pedestrians, police and particles: the moving life of Solmar Bay.
 // Traffic follows the road grid, pedestrians walk the sidewalks and flee from
 // danger, and the police answer the player's wanted level.
-import { WORLD, STREETS_Y, AVENUES_X, PALETTE, TUNE } from './config.js';
+import { WORLD, STREETS_Y, AVENUES_X, PALETTE, TUNE, VEHICLE_MODELS } from './config.js';
 import { collideCircle, randomRoadPoint, nearestRoadPoint } from './city.js';
 import { pick, range } from './random.js';
 
+// Six vehicle models, each with its own speed, acceleration, handling and
+// silhouette. A model can be picked by id, or rolled from the seed like a colour.
+export function vehicleModel(opts = {}) {
+  if (opts.model) {
+    const found = VEHICLE_MODELS.find((m) => m.id === opts.model);
+    if (found) return found;
+  }
+  if (opts.type === 'police') {
+    return { id: 'interceptor', name: 'Police Interceptor', max: 470, accel: 360, turn: 2.9, len: 42, w: 20, color: '#e8e8e8', stripe: '#1a1a1a' };
+  }
+  if (opts.type === 'van') {
+    return { id: 'armored', name: 'Armored Van', max: 300, accel: 200, turn: 1.8, len: 52, w: 24, color: '#3d3a38', stripe: '#c8a24a' };
+  }
+  return pick(opts.rng || Math.random, VEHICLE_MODELS);
+}
+
 export function makeCar(x, y, angle, opts = {}) {
+  const model = vehicleModel(opts);
   return {
     kind: 'car',
-    type: opts.type || 'traffic', // traffic | parked | police | getaway | van
+    type: opts.type || 'traffic', // traffic | parked | police | getaway | van | taxi
+    modelId: model.id,
+    modelName: model.name,
+    modelMax: model.max,
+    modelAccel: model.accel,
+    modelTurn: model.turn,
+    modelLen: model.len,
+    modelW: model.w,
+    modelStripe: model.stripe,
     x, y, angle,
     speed: opts.speed || 0,
-    color: opts.color || pick(opts.rng || Math.random, PALETTE.carColors),
+    color: opts.color || model.color,
     health: opts.health ?? 120,
     maxHealth: opts.health ?? 120,
     driver: opts.driver ?? true, // a traffic car with a driver can be carjacked
@@ -22,6 +47,65 @@ export function makeCar(x, y, angle, opts = {}) {
     siren: false,
     id: opts.id || 0,
   };
+}
+
+// --- Police helicopter: an airborne pursuer that escalates with the wanted level.
+export function makeHelicopter(x, y, opts = {}) {
+  return {
+    kind: 'heli', x, y, angle: 0, rotor: 0, speed: 0,
+    altitude: 1, leaving: false, searchTimer: 0, id: opts.id || 0,
+  };
+}
+
+export function spawnHelicopter(world) {
+  const p = world.player;
+  const px = p.inCar ? p.car.x : p.x;
+  const py = p.inCar ? p.car.y : p.y;
+  const a = world.rng() * Math.PI * 2;
+  const heli = makeHelicopter(px + Math.cos(a) * 600, py + Math.sin(a) * 600, { id: world.nextId() });
+  world.heli = heli;
+  world.audio.heliAlert();
+  world.events.push({ type: 'banner', text: 'Police helicopter overhead — lose it!', color: '#ff5a4e' });
+  return heli;
+}
+
+// A helicopter hovers 260 px off the player, spotlight on them, and keeps the
+// heat up while it watches. At 5 stars a second pass is faster, not a second heli.
+export function updateHelicopter(world, heli, dt) {
+  const p = world.player;
+  const tx = p.inCar ? p.car.x : p.x;
+  const ty = p.inCar ? p.car.y : p.y;
+  heli.rotor += dt * 22;
+  if (heli.leaving) {
+    heli.x += Math.cos(heli.angle) * TUNE.heliSpeed * 1.4 * dt;
+    heli.y += Math.sin(heli.angle) * TUNE.heliSpeed * 1.4 * dt;
+    if (Math.hypot(heli.x - tx, heli.y - ty) > 1400) world.heli = null;
+    return;
+  }
+  // Hover offset so the spotlight cone, not the body, sits on the player.
+  const hx = tx + 180;
+  const hy = ty - 180;
+  const dx = hx - heli.x;
+  const dy = hy - heli.y;
+  const d = Math.hypot(dx, dy);
+  heli.angle = Math.atan2(dy, dx);
+  const speed = world.wanted >= 5 ? TUNE.heliSpeed * 1.25 : TUNE.heliSpeed;
+  if (d > 40) {
+    heli.x += Math.cos(heli.angle) * Math.min(speed, d * 2) * dt;
+    heli.y += Math.sin(heli.angle) * Math.min(speed, d * 2) * dt;
+  }
+  heli.searchTimer += dt;
+  // The spotlight holds the wanted level: heat does not decay under the heli.
+  if (d < 700) world.lastCrimeAt = world.time;
+}
+
+// A taxi passenger waiting on the sidewalk, flagging a cab down.
+export function spawnTaxiPassenger(world, x, y) {
+  const ped = makePed(x, y, { rng: world.rng, id: world.nextId() });
+  ped.state = 'taxi';
+  ped.color = '#ffd34e';
+  world.peds.push(ped);
+  return ped;
 }
 
 export function makePed(x, y, opts = {}) {
@@ -79,7 +163,7 @@ function nextWaypoint(car, rng) {
 }
 
 export function updateTrafficCar(world, car, dt) {
-  if (car.type !== 'traffic') return;
+  if (car.type !== 'traffic' && car.type !== 'taxi') return;
   if (!car.wp) nextWaypoint(car, world.rng);
   const dx = car.wp.x - car.x;
   const dy = car.wp.y - car.y;

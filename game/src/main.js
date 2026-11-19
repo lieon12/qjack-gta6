@@ -72,6 +72,8 @@ function loop(now) {
     } else {
       if (input.pressed('KeyP') || input.pressed('Escape')) screen = 'pause';
       if (input.pressed('KeyM')) world.audio.musicOn = !world.audio.musicOn;
+      // T toggles taxi duty and N skips two in-game hours; both are handled
+      // inside world.step so scripted play and screenshots see the same rules.
       const mouseWorld = {
         x: world.camera.x + (input.mouse.x - canvas.width / 2) / world.camera.zoom,
         y: world.camera.y + (input.mouse.y - canvas.height / 2) / world.camera.zoom,

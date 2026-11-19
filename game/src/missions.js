@@ -1,7 +1,8 @@
 // The story: Danny Vega, new in Solmar Bay, works jobs for Mama Rosa while
-// Los Tiburones push back. Five missions, each a chain of small objectives
+// Los Tiburones push back. Eight missions, each a chain of small objectives
 // the world checks every step: reach a place, steal a car, take someone down,
-// lose the cops.
+// lose the cops. Missions 6-8 are the "Tiburon Rising" arc: the gang moves
+// on the Casino, the Marina and the Strip, and Danny ends it.
 import { PLACES, TUNE } from './config.js';
 import { makeCar, makePed } from './entities.js';
 
@@ -62,6 +63,54 @@ export const MISSIONS = [
     stages: [
       { type: 'stealCar', x: 2600, y: 600, text: 'Steal the yellow Comet GT uptown' },
       { type: 'escape', x: PLACES.hideout.x, y: PLACES.hideout.y, r: 90, text: 'Lose the cops — reach the hideout' },
+    ],
+  },
+  {
+    name: 'Tiburon Rising I — Casino Lights',
+    giver: 'Mama Rosa',
+    intro: [
+      'Mama Rosa: "Los Tiburones are leaning on my Casino now, Danny. They',
+      'want the chip money and they want the Strip quiet. First, earn',
+      'like a local: run one taxi fare, so nobody looks twice at you."',
+      'Run a taxi fare (press T, pick up the passenger, drop them off),',
+      'then get to the Solmar Grand Casino.',
+    ],
+    reward: 1200,
+    stages: [
+      { type: 'taxi', text: 'Run one taxi fare — press T for duty, pick up the passenger' },
+      { type: 'goto', x: PLACES.casino.x, y: PLACES.casino.y, r: 90, text: 'Get to the Solmar Grand Casino' },
+      { type: 'pickup', x: PLACES.casino.x, y: PLACES.casino.y, r: 90, text: 'Collect the chip money at the Casino' },
+    ],
+  },
+  {
+    name: 'Tiburon Rising II — Marina Tide',
+    giver: 'Mama Rosa',
+    intro: [
+      'Mama Rosa: "The Tiburones keep their boats at the Marina, and their',
+      'enforcers are shaking down the Strip. Clear the Strip, then take',
+      'their package off the pier before it sails."',
+      'Clear the Strip of Tiburones enforcers, then grab the Marina package.',
+    ],
+    reward: 1500,
+    stages: [
+      { type: 'goto', x: PLACES.strip.x, y: PLACES.strip.y, r: 140, text: 'Go to the Strip' },
+      { type: 'kill', count: 4, x: PLACES.strip.x, y: PLACES.strip.y, text: 'Take down the Tiburones enforcers (0/4)' },
+      { type: 'pickup', x: PLACES.marina.x, y: PLACES.marina.y, r: 90, text: 'Grab the package at the Marina' },
+    ],
+  },
+  {
+    name: 'Tiburon Rising III — The Shark Surfaces',
+    giver: 'Mama Rosa',
+    intro: [
+      'Mama Rosa: "El Tiburon himself is at the Marina in his black limo.',
+      'Take it — the helicopter will be on you the moment you do. Lose',
+      'the cops and the heli, and bring the limo to the hideout."',
+      'Steal the Tiburon limo at the Marina, lose the helicopter, escape.',
+    ],
+    reward: 3000,
+    stages: [
+      { type: 'stealCar', x: PLACES.marina.x, y: PLACES.marina.y, model: 'limo', color: '#1d3557', text: 'Steal the black Tiburon limo at the Marina' },
+      { type: 'escape', x: PLACES.hideout.x, y: PLACES.hideout.y, r: 90, text: 'Lose the cops and the helicopter — reach the hideout' },
     ],
   },
   {
@@ -126,16 +175,23 @@ export class MissionManager {
     if (!stage) return;
     if (stage.type === 'stealCar' && !this.getaway) {
       const car = makeCar(stage.x, stage.y, 0, {
-        type: 'parked', color: '#f2c14e', rng: world.rng, id: world.nextId(),
+        type: 'parked', color: stage.color || '#f2c14e', model: stage.model || undefined,
+        rng: world.rng, id: world.nextId(),
       });
       car.driver = false;
       car.getaway = true;
       world.cars.push(car);
       this.getaway = car;
     }
+    if (stage.type === 'taxi' && !world.taxi.onDuty) {
+      world.taxi.onDuty = true;
+      world.spawnTaxiPickup();
+    }
     if (stage.type === 'kill' && this.gang.length === 0) {
+      const cx = stage.x ?? PLACES.park.x;
+      const cy = stage.y ?? PLACES.park.y;
       for (let i = 0; i < stage.count; i += 1) {
-        const ped = makePed(PLACES.park.x + (i - 1) * 70, PLACES.park.y + (i % 2) * 60 - 30, {
+        const ped = makePed(cx + (i - 1) * 70, cy + (i % 2) * 60 - 30, {
           rng: world.rng, id: world.nextId(),
         });
         ped.state = 'gang';
@@ -199,6 +255,7 @@ export class MissionManager {
       retry: this.current,
     };
     // Clean up mission props so the retry starts fresh.
+    // A failed taxi stage keeps the fare system running; the retry reuses it.
     if (this.van) { this.van.dead = true; this.van = null; }
     if (this.getaway && !this.world.player.inCar) { this.getaway.dead = true; this.getaway = null; }
     for (const g of this.gang) if (g.state !== 'down') g.state = 'walk';
@@ -242,13 +299,23 @@ export class MissionManager {
     const px = p.inCar ? p.car.x : p.x;
     const py = p.inCar ? p.car.y : p.y;
     switch (s.type) {
+      case 'taxi': {
+        // A fare completed while this stage is active finishes the stage.
+        if (world.taxi.fareDone) {
+          world.taxi.fareDone = false;
+          this.advance();
+        }
+        break;
+      }
       case 'steal': {
         if (p.inCar) this.advance();
         break;
       }
       case 'stealCar': {
         if (p.inCar && p.car && p.car.getaway) {
-          world.addWanted(40, 'getaway stolen');
+          // Mission 8's limo brings the helicopter: 3 stars, not 2.
+          const heat = this.current === 6 ? 60 : 40;
+          world.addWanted(heat, 'getaway stolen');
           world.events.push({ type: 'banner', text: 'The cops are coming — lose them!', color: '#ff5a4e' });
           world.audio.wantedUp();
           this.advance();

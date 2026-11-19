@@ -1,7 +1,7 @@
 // Drawing the world: sun-soaked streets, pastel buildings with height shadows,
 // palms, the beach and the ocean, then every car, pedestrian and effect.
 // The camera follows the player; everything is drawn on one canvas.
-import { WORLD, STREETS_Y, AVENUES_X, ROAD_W, BEACH_Y, WATER_Y, PARK, DOCKS, PLACES, PALETTE } from './config.js';
+import { WORLD, STREETS_Y, AVENUES_X, ROAD_W, BEACH_Y, WATER_Y, PARK, DOCKS, PLACES, PALETTE, STRIP, CASINO_ROW, MARINA } from './config.js';
 
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -79,6 +79,41 @@ export function drawWorld(ctx, world, viewW, viewH) {
     for (let i = 1; i < 4; i += 1) {
       ctx.beginPath(); ctx.moveTo(c.x + (c.w / 4) * i, c.y); ctx.lineTo(c.x + (c.w / 4) * i, c.y + c.h); ctx.stroke();
     }
+  }
+
+  // New districts: the Strip's neon pavement, the Casino row's gold forecourt,
+  // and the Marina's piers and moored boats on the water's edge.
+  ctx.fillStyle = 'rgba(232,111,184,0.16)';
+  ctx.fillRect(STRIP.x, STRIP.y, STRIP.w, STRIP.h);
+  ctx.fillStyle = 'rgba(255,211,78,0.14)';
+  ctx.fillRect(CASINO_ROW.x, CASINO_ROW.y, CASINO_ROW.w, CASINO_ROW.h);
+  ctx.fillStyle = 'rgba(127,196,217,0.18)';
+  ctx.fillRect(MARINA.x, MARINA.y, MARINA.w, MARINA.h);
+  for (const pier of world.city.piers || []) {
+    ctx.fillStyle = '#8a6b46';
+    ctx.fillRect(pier.x, pier.y, pier.w, pier.h);
+    ctx.fillStyle = '#a8875e';
+    ctx.fillRect(pier.x, pier.y, pier.w, 8);
+  }
+  for (const boat of world.city.boats || []) {
+    if (!inView(boat.x, boat.y, 60)) continue;
+    ctx.save();
+    ctx.translate(boat.x, boat.y);
+    ctx.rotate(boat.angle);
+    ctx.fillStyle = boat.color;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 26, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(20,30,40,0.7)';
+    ctx.fillRect(-8, -5, 16, 10);
+    ctx.restore();
+  }
+  for (const neon of world.city.stripNeon || []) {
+    if (!inView(neon.x, neon.y, 80)) continue;
+    ctx.fillStyle = neon.color;
+    ctx.fillRect(neon.x, neon.y, neon.w, 10);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillRect(neon.x, neon.y + 10, neon.w, 4);
   }
 
   // Roads: asphalt, sidewalks, dashed centre lines.
@@ -162,6 +197,9 @@ export function drawWorld(ctx, world, viewW, viewH) {
     [PLACES.hospital, 'SOLMAR GENERAL', '#fff'],
     [PLACES.marlinHotel, 'MARLIN HOTEL', '#ffd34e'],
     [PLACES.bank, 'SOLMAR TRUST', '#e8e8e8'],
+    [PLACES.casino, 'SOLMAR GRAND CASINO', '#ffd34e'],
+    [PLACES.strip, 'THE STRIP', '#e86fb8'],
+    [PLACES.marina, 'SOLMAR MARINA', '#7fc4d9'],
   ];
   for (const [place, label, color] of signs) {
     if (!inView(place.x, place.y, 200)) continue;
@@ -204,6 +242,24 @@ export function drawWorld(ctx, world, viewW, viewH) {
     ctx.fill();
   }
 
+  // Taxi markers: a yellow ring on the waiting passenger, a green ring on
+  // the destination while a fare is running.
+  if (world.taxi) {
+    const t = world.taxi;
+    if (t.passenger) {
+      ctx.strokeStyle = '#ffd34e';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(t.passenger.x, t.passenger.y, 24 + Math.sin(world.time * 5) * 4, 0, Math.PI * 2); ctx.stroke();
+    }
+    if (t.dest) {
+      ctx.strokeStyle = '#7fd67f';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(t.dest.x, t.dest.y, 26 + Math.sin(world.time * 5) * 4, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = 'rgba(127,214,127,0.2)';
+      ctx.beginPath(); ctx.arc(t.dest.x, t.dest.y, 26, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
   // Cars.
   for (const car of world.cars) {
     if (car.dead && car.type !== 'van') continue;
@@ -215,6 +271,41 @@ export function drawWorld(ctx, world, viewW, viewH) {
   for (const ped of world.peds) {
     if (!inView(ped.x, ped.y, 40)) continue;
     drawPed(ctx, ped);
+  }
+
+  // The police helicopter, rotor spinning, spotlight cone on the player.
+  if (world.heli) {
+    const h = world.heli;
+    const px = world.player.x;
+    const py = world.player.y;
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = '#fff8c9';
+    ctx.beginPath();
+    ctx.moveTo(h.x, h.y);
+    ctx.lineTo(px - 40, py - 30);
+    ctx.lineTo(px + 40, py - 30);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(255,248,201,0.5)';
+    ctx.beginPath(); ctx.arc(px, py, 26, 0, Math.PI * 2); ctx.fill();
+    ctx.translate(h.x, h.y);
+    ctx.rotate(h.angle);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(4, 5, 26, 12, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1a2a4a';
+    ctx.beginPath(); ctx.ellipse(0, 0, 26, 12, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#e8e8e8';
+    ctx.beginPath(); ctx.ellipse(12, 0, 8, 7, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#1a2a4a';
+    ctx.lineWidth = 3;
+    const r = h.rotor;
+    ctx.beginPath(); ctx.moveTo(Math.cos(r) * -34, Math.sin(r) * -34); ctx.lineTo(Math.cos(r) * 34, Math.sin(r) * 34); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(Math.cos(r + Math.PI / 2) * -34, Math.sin(r + Math.PI / 2) * -34); ctx.lineTo(Math.cos(r + Math.PI / 2) * 34, Math.sin(r + Math.PI / 2) * 34); ctx.stroke();
+    ctx.fillStyle = '#ff2a2a';
+    ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
   }
 
   // The player, ringed so the eye finds them instantly.
@@ -241,26 +332,85 @@ export function drawWorld(ctx, world, viewW, viewH) {
 
   ctx.restore();
 
-  // Warm sun glare, drawn over the whole frame.
-  const g = ctx.createRadialGradient(viewW * 0.82, viewH * 0.08, 40, viewW * 0.82, viewH * 0.08, viewW * 0.75);
-  g.addColorStop(0, 'rgba(255,236,170,0.14)');
-  g.addColorStop(1, 'rgba(255,236,170,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, viewW, viewH);
+  // Day / night: the sky darkens after 18:00 and lifts again after 06:00,
+  // with a cold moon glow at night instead of the warm sun glare.
+  const dark = world.darkness ? world.darkness() : 0;
+  if (dark > 0) {
+    ctx.fillStyle = `rgba(8,10,40,${(dark * 0.45).toFixed(3)})`;
+    ctx.fillRect(0, 0, viewW, viewH);
+    const mg = ctx.createRadialGradient(viewW * 0.18, viewH * 0.12, 20, viewW * 0.18, viewH * 0.12, viewW * 0.4);
+    mg.addColorStop(0, `rgba(200,220,255,${(dark * 0.12).toFixed(3)})`);
+    mg.addColorStop(1, 'rgba(200,220,255,0)');
+    ctx.fillStyle = mg;
+    ctx.fillRect(0, 0, viewW, viewH);
+  } else {
+    const g = ctx.createRadialGradient(viewW * 0.82, viewH * 0.08, 40, viewW * 0.82, viewH * 0.08, viewW * 0.75);
+    g.addColorStop(0, 'rgba(255,236,170,0.14)');
+    g.addColorStop(1, 'rgba(255,236,170,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, viewW, viewH);
+  }
+  // Weather: rain streaks slant across the frame; fog is a pale wash that
+  // shortens how far the player can read the street.
+  if (world.weather) {
+    if (world.weather.rain) {
+      ctx.strokeStyle = 'rgba(180,200,220,0.45)';
+      ctx.lineWidth = 1;
+      const t = world.time * 900;
+      for (let i = 0; i < 60; i += 1) {
+        const x = ((i * 173 + t) % (viewW + 40)) - 20;
+        const y = (i * 97 + t * 1.4) % viewH;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 6, y + 16); ctx.stroke();
+      }
+    } else if (world.weather.id === 'fog') {
+      ctx.fillStyle = 'rgba(200,205,215,0.28)';
+      ctx.fillRect(0, 0, viewW, viewH);
+    } else if (world.weather.id === 'cloudy') {
+      ctx.fillStyle = 'rgba(120,130,150,0.10)';
+      ctx.fillRect(0, 0, viewW, viewH);
+    }
+  }
 }
 
 function drawCar(ctx, car, world) {
   ctx.save();
   ctx.translate(car.x, car.y);
   ctx.rotate(car.angle);
+  // Each model has its own length and width, so a limo reads long and a
+  // speedster reads low and wide next to a boxy van.
+  const len = car.modelLen || 40;
+  const wid = car.modelW || 20;
+  const halfL = len / 2;
+  const halfW = wid / 2;
   // Shadow.
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  roundRect(ctx, -19, -9 + 4, 40, 22, 7);
+  roundRect(ctx, -halfL + 1, -halfW + 5, len, wid + 2, 7);
   ctx.fill();
   const isPolice = car.type === 'police';
   ctx.fillStyle = isPolice ? PALETTE.policeWhite : car.color;
-  roundRect(ctx, -20, -10, 40, 20, 7);
+  roundRect(ctx, -halfL, -halfW, len, wid, 7);
   ctx.fill();
+  // Model stripe down the body; the taxi gets its checker band instead.
+  if (car.modelId === 'taxi' || car.type === 'taxi') {
+    ctx.fillStyle = '#1a1a1a';
+    for (let i = 0; i < 5; i += 1) ctx.fillRect(-halfL + 4 + i * 7, -halfW, 4, 5);
+    ctx.fillStyle = '#ffd34e';
+    ctx.font = 'bold 8px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('TAXI', 0, 3);
+  } else if (car.modelStripe) {
+    ctx.fillStyle = car.modelStripe;
+    ctx.fillRect(-halfL + 4, -3, len - 8, 6);
+  }
+  if (car.modelId === 'speedster') {
+    // Rear spoiler.
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(-halfL - 2, -halfW - 2, 4, wid + 4);
+  }
+  if (car.modelId === 'limo') {
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillRect(-4, -halfW + 2, 3, wid - 4);
+  }
   if (isPolice) {
     ctx.fillStyle = PALETTE.policeBlack;
     ctx.fillRect(-4, -10, 10, 20);

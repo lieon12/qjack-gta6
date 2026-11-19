@@ -93,6 +93,9 @@ function runSteps(world, input, seconds, mouseWorld) {
 // garage with the car they just stole (mission 1, stage 2).
 function stageChase(world) {
   const input = scriptedInput();
+  // Revision showcase: night rain, and the police helicopter overhead.
+  world.clockHours = 22;
+  world.setWeather('rain');
   world.missions.start(0);
   world.dialog = null; // skip the intro card for the screenshot
   world.player.x = 1300;
@@ -109,26 +112,39 @@ function stageChase(world) {
       world.step(STEP, input, { x: world.player.x + 100, y: world.player.y });
     }
   }
-  world.banner = { text: `Wanted level ${world.wanted} — lose the cops!`, color: '#ff5a4e', t: 3 };
+  if (world.wanted >= 3) world.updateHeli(0.1);
+  world.banner = { text: `Wanted level ${world.wanted} — lose the cops and the heli!`, color: '#ff5a4e', t: 3 };
   return { screen: 'play' };
 }
 
 // 2 — on foot downtown: traffic, pedestrians, a police car cruising past.
 function stageStreet(world) {
   const input = scriptedInput();
-  world.player.x = 800;
-  world.player.y = 600;
+  // Revision showcase: the neon Strip in daylight, a City Taxi on duty with
+  // a passenger flagging it down.
+  world.clockHours = 13;
+  world.setWeather('clear');
+  world.player.x = 2300;
+  world.player.y = 1400;
   world.player.angle = 0;
+  world.taxi.onDuty = true;
+  world.spawnTaxiPickup();
+  const cab = makeCar(2350, 1400, 0, { type: 'parked', model: 'taxi', rng: world.rng, id: world.nextId() });
+  cab.driver = false;
+  world.cars.push(cab);
   world.addWanted(20, 'street');
   for (let i = 0; i < 6; i += 1) {
-    const ped = makePed(700 + i * 60, 560 + (i % 2) * 80, { rng: world.rng, id: world.nextId() });
+    const ped = makePed(2200 + i * 60, 1360 + (i % 2) * 80, { rng: world.rng, id: world.nextId() });
     world.peds.push(ped);
   }
   for (let i = 0; i < 4; i += 1) {
     runSteps(world, input, 0.5);
-    walkToward(input, world, 1100, 600);
+    walkToward(input, world, 2500, 1400);
   }
-  runSteps(world, input, 1.5);
+  // End the walk back in the middle of the Strip so the frame shows it.
+  world.player.x = 2400;
+  world.player.y = 1400;
+  runSteps(world, input, 0.5);
   return { screen: 'play' };
 }
 
@@ -136,7 +152,9 @@ function stageStreet(world) {
 // the cash is on the street, four wanted stars, cops closing in.
 function stageHeist(world) {
   const input = scriptedInput();
-  world.missions.start(4);
+  world.clockHours = 19;
+  world.setWeather('cloudy');
+  world.missions.start(7); // The Big Score is mission 8 after the Tiburon Rising arc
   world.dialog = null; // skip the intro card for the screenshot
   // Stage 1 (go to the bank) completes by standing at the bank.
   world.player.x = PLACES.bank.x;
@@ -214,11 +232,22 @@ function stageHeist(world) {
 }
 
 // 4 — a golden drive down Ocean Drive: beach, palms, hotels, the ocean.
+// Revision showcase: the Marina at sunset (18:30) in the Marina Speedster,
+// piers and moored boats on the water's edge.
 function stageBeach(world) {
   const input = scriptedInput();
-  const car = putPlayerInCar(world, 2900, 2320, '#f28c28');
-  car.angle = Math.PI; // westbound, along the beach
-  for (let s = 0; s < 4; s += 1) {
+  world.clockHours = 18.5;
+  world.setWeather('clear');
+  const car = makeCar(3400, 2320, Math.PI, { type: 'parked', model: 'speedster', rng: world.rng, id: world.nextId() });
+  car.driver = false;
+  world.cars.push(car);
+  world.player.x = 3400;
+  world.player.y = 2350;
+  const { enterCar: enter } = { enterCar: null };
+  world.player.inCar = car;
+  world.player.car = car;
+  car.type = 'player';
+  for (let s = 0; s < 2; s += 1) {
     for (let i = 0; i < 60; i += 1) {
       driveToward(input, world, world.player.car.x - 900, 2320);
       world.step(STEP, input, { x: world.player.x - 100, y: world.player.y });
