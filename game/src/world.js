@@ -1,18 +1,21 @@
 // The world: everything the game simulates each step — the player, traffic,
 // pedestrians, police, the wanted level, missions, pickups and the camera.
 // main.js only runs the loop and draws; this file decides what happens.
-import { WORLD, PLACES, PARK, TUNE, WEATHER_TYPES } from './config.js';
-import { buildCity, randomRoadPoint, districtAt } from './city.js';
+import { WORLD, PLACES, PARK, TUNE } from './config.js';
+import { buildCity, randomRoadPoint } from './city.js';
 import { mulberry32, range, rangeInt, pick } from './random.js';
 import { makePlayer, updatePlayer, exitCar } from './player.js';
 import {
   makeCar, makePed, updateTrafficCar, updatePed, updatePoliceCar, updateCop,
   spawnPoliceCar, spawnCop, policeTargetCount, damageCar, updateParticles,
-  makeHelicopter, spawnHelicopter, updateHelicopter, spawnTaxiPassenger,
 } from './entities.js';
-import { MissionManager } from './missions.js';
+import { MissionManager, MISSIONS } from './missions.js';
 import { AudioEngine } from './audio.js';
 import { loadSave, writeSave } from './save.js';
+import { SkyClock } from './daynight.js';
+import { PoliceHeli } from './helicopter.js';
+import { TaxiJob } from './taxi.js';
+import { VEHICLE_MODELS, randomModel } from './vehicles.js';
 
 let idCounter = 1;
 
@@ -38,22 +41,15 @@ export class World {
     this.missions = new MissionManager(this);
     this.missionsDoneCount = 0;
     this.nextMissionAt = null;
+    this.sky = new SkyClock();
+    this.heli = new PoliceHeli();
+    this.taxi = new TaxiJob();
     this.shopOwnedPistol = false;
     this.dialog = null;
     this.banner = null;
     this.over = null; // 'wasted' | 'busted'
     this.camera = { x: this.player.x, y: this.player.y, zoom: 1 };
     this.playerSpeed = 0;
-    // Revision systems: a clock, weather, a police helicopter and taxi fares.
-    this.clockHours = 10; // 10:00 on day one, a full day lasts 480 seconds
-    this.weather = WEATHER_TYPES[0];
-    this.weatherTimer = 45;
-    this.heli = null;
-    this.taxi = {
-      onDuty: false, passenger: null, dest: null, fare: 0, earned: 0,
-      faresDone: 0, fareDone: false, timer: 0, pickupAt: null,
-    };
-    this.district = 'Downtown';
     this.cashTimer = 20;
     this.shopPrompt = null;
     this.saved = loadSave();
@@ -74,143 +70,8 @@ export class World {
     this.player.y = data.y ?? this.player.y;
     this.camera.x = this.player.x;
     this.camera.y = this.player.y;
-    if (this.missionsDoneCount > 0 && this.missionsDoneCount < 8) {
+    if (this.missionsDoneCount > 0 && this.missionsDoneCount < MISSIONS.length) {
       this.nextMissionAt = { x: PLACES.rosaGarage.x, y: PLACES.rosaGarage.y };
-    }
-    if (typeof data.taxiEarned === 'number') this.taxi.earned = data.taxiEarned;
-    if (typeof data.clockHours === 'number') this.clockHours = data.clockHours;
-    if (typeof data.weather === 'string') {
-      const w = WEATHER_TYPES.find((t) => t.id === data.weather);
-      if (w) this.weather = w;
-    }
-  }
-
-  // --- Day / night and weather ---------------------------------------------
-  // The clock runs 24 hours per 480 seconds; night is 20:00-06:00.
-  advanceClock(dt) {
-    this.clockHours = (this.clockHours + (dt * 24) / TUNE.dayLengthSec) % 24;
-  }
-
-  advanceTime(hours) {
-    this.clockHours = (this.clockHours + hours) % 24;
-    this.events.push({ type: 'banner', text: `Time: ${this.clockLabel()}`, color: '#ffd34e' });
-  }
-
-  clockLabel() {
-    const h = Math.floor(this.clockHours);
-    const m = Math.floor((this.clockHours - h) * 60);
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  }
-
-  isNight() {
-    return this.clockHours >= 20 || this.clockHours < 6;
-  }
-
-  // 0 in full daylight, 1 at midnight: the renderer darkens by this much.
-  darkness() {
-    if (this.clockHours >= 20) return Math.min(1, (this.clockHours - 20) / 2);
-    if (this.clockHours < 6) return this.clockHours < 2 ? 1 : 1 - (this.clockHours - 2) / 4;
-    if (this.clockHours < 8) return 1 - (this.clockHours - 6) / 2;
-    if (this.clockHours >= 18) return (this.clockHours - 18) / 2;
-    return 0;
-  }
-
-  updateWeather(dt) {
-    this.weatherTimer -= dt;
-    if (this.weatherTimer > 0) return;
-    this.weatherTimer = 45 + this.rng() * 30;
-    const next = WEATHER_TYPES[Math.floor(this.rng() * WEATHER_TYPES.length)];
-    if (next.id !== this.weather.id) {
-      this.weather = next;
-      this.events.push({ type: 'banner', text: `Weather: ${next.label}${next.id === 'rain' ? ' — roads are slick' : ''}`, color: '#7fb8d9' });
-    }
-  }
-
-  setWeather(id) {
-    const w = WEATHER_TYPES.find((t) => t.id === id);
-    if (w) { this.weather = w; this.weatherTimer = 60; }
-  }
-
-  // --- Taxi -----------------------------------------------------------------
-  taxiToggle() {
-    const t = this.taxi;
-    t.onDuty = !t.onDuty;
-    if (!t.onDuty) {
-      if (t.passenger) { t.passenger.state = 'walk'; t.passenger = null; }
-      t.dest = null;
-      this.events.push({ type: 'banner', text: 'Off duty — taxi fares paused', color: '#e8e8e8' });
-    } else {
-      this.events.push({ type: 'banner', text: 'Taxi on duty — pick up the flagged passenger', color: '#ffd34e' });
-      this.spawnTaxiPickup();
-    }
-  }
-
-  spawnTaxiPickup() {
-    const t = this.taxi;
-    if (t.passenger) return;
-    const p = this.player;
-    const a = this.rng() * Math.PI * 2;
-    const near = { x: p.x + Math.cos(a) * 260, y: p.y + Math.sin(a) * 260 };
-    const road = { x: Math.max(80, Math.min(WORLD.w - 80, near.x)), y: Math.max(80, Math.min(2300, near.y)) };
-    t.passenger = spawnTaxiPassenger(this, road.x, road.y);
-    t.pickupAt = { x: road.x, y: road.y };
-  }
-
-  updateTaxi(dt) {
-    const t = this.taxi;
-    if (!t.onDuty) return;
-    const p = this.player;
-    if (!t.dest && !t.passenger) this.spawnTaxiPickup();
-    // Pick up: the passenger boards when the player's car stops beside them.
-    if (t.passenger && !t.dest) {
-      const px = p.inCar ? p.car.x : p.x;
-      const py = p.inCar ? p.car.y : p.y;
-      const d = Math.hypot(t.passenger.x - px, t.passenger.y - py);
-      if (p.inCar && d < 60) {
-        this.peds = this.peds.filter((pd) => pd !== t.passenger);
-        const dest = randomRoadPoint(this.rng);
-        t.dest = { x: dest.x, y: dest.y };
-        t.fare = Math.round(TUNE.taxiBaseFare + Math.hypot(dest.x - px, dest.y - py) * TUNE.taxiPerMetre);
-        t.timer = TUNE.taxiTimeLimit;
-        t.passenger = null;
-        this.events.push({ type: 'banner', text: `Passenger aboard — fare $${t.fare}`, color: '#ffd34e' });
-      }
-    }
-    // Drop off: arrive at the destination before the timer runs out.
-    if (t.dest) {
-      t.timer -= dt;
-      const px = p.inCar ? p.car.x : p.x;
-      const py = p.inCar ? p.car.y : p.y;
-      if (Math.hypot(t.dest.x - px, t.dest.y - py) < 70) {
-        p.money += t.fare;
-        t.earned += t.fare;
-        t.faresDone += 1;
-        t.fareDone = true;
-        this.audio.fare();
-        this.events.push({ type: 'banner', text: `Fare complete +$${t.fare}  (total fares $${t.earned})`, color: '#7fd67f' });
-        t.dest = null;
-        t.fare = 0;
-        this.spawnTaxiPickup();
-      } else if (t.timer <= 0) {
-        this.events.push({ type: 'banner', text: 'Passenger gave up — fare lost', color: '#ff5a4e' });
-        t.dest = null;
-        t.fare = 0;
-        this.spawnTaxiPickup();
-      }
-    }
-  }
-
-  // --- Police helicopter ------------------------------------------------------
-  updateHeli(dt) {
-    if (this.wanted >= 3 && !this.heli) spawnHelicopter(this);
-    if (this.heli) {
-      if (this.wanted === 0 && !this.heli.leaving) {
-        this.heli.leaving = true;
-        this.audio.setHeli(false);
-      } else if (this.wanted > 0) {
-        this.audio.setHeli(true);
-      }
-      updateHelicopter(this, this.heli, dt);
     }
   }
 
@@ -225,25 +86,16 @@ export class World {
       [650, 2200, 0], [3050, 2200, 0], [800, 1400, Math.PI], [2300, 1400, 0],
       [2600, 1800, 0], [1050, 2200, Math.PI],
     ];
-    for (const [x, y, a] of spots) {
-      const car = makeCar(x, y, a, { type: 'parked', rng: this.rng, id: this.nextId() });
+    for (const [i, [x, y, a]] of spots.entries()) {
+      // Parked cars are dealt the six vehicle models in turn, so every model
+      // is sitting somewhere in the city from the start.
+      const car = makeCar(x, y, a, {
+        type: 'parked', rng: this.rng, id: this.nextId(),
+        model: VEHICLE_MODELS[i % VEHICLE_MODELS.length].id,
+      });
       car.driver = false;
       this.cars.push(car);
     }
-    // One parked car of each of the six models, so every model is drivable
-    // from the start, plus two taxis waiting by the stand.
-    const modelSpots = [
-      ['comet', 1900, 600, 0], ['sedan', 2200, 600, 0], ['van', 800, 1800, Math.PI],
-      ['limo', 2800, 1400, 0], ['speedster', 3300, 1800, Math.PI], ['taxi', 1300, 600, 0],
-    ];
-    for (const [model, x, y, a] of modelSpots) {
-      const car = makeCar(x, y, a, { type: 'parked', model, rng: this.rng, id: this.nextId() });
-      car.driver = false;
-      this.cars.push(car);
-    }
-    const cab = makeCar(1350, 600, 0, { type: 'parked', model: 'taxi', rng: this.rng, id: this.nextId() });
-    cab.driver = false;
-    this.cars.push(cab);
     for (let i = 0; i < 10; i += 1) this.spawnTrafficCar();
     for (let i = 0; i < 14; i += 1) this.spawnPed();
   }
@@ -252,6 +104,7 @@ export class World {
     const p = randomRoadPoint(this.rng);
     const car = makeCar(p.x, p.y, p.horizontal ? 0 : Math.PI / 2, {
       type: 'traffic', rng: this.rng, id: this.nextId(),
+      model: randomModel(this.rng).id,
     });
     car.dir = p.horizontal ? 0 : 1;
     this.cars.push(car);
@@ -339,8 +192,6 @@ export class World {
     p.car = null;
     this.setWanted(0);
     this.over = null;
-    this.heli = null;
-    this.audio.setHeli(false);
     // Clear the police that were on the player.
     this.cars = this.cars.filter((c) => c.type !== 'police');
     this.peds = this.peds.filter((pd) => pd.state !== 'cop');
@@ -351,13 +202,10 @@ export class World {
   step(dt, input, mouseWorld) {
     if (this.dialog || this.over) return; // dialogs and game-over pause the world
     this.time += dt;
+    this.sky.update(dt, this.rng);
+    this.heli.update(this, dt);
     this.gunshotTimer = Math.max(0, this.gunshotTimer - dt);
     this.skidTimer = Math.max(0, this.skidTimer - dt);
-    this.advanceClock(dt);
-    this.updateWeather(dt);
-    this.district = districtAt(this.player.x, this.player.y);
-    if (input.pressed('KeyT')) this.taxiToggle();
-    if (input.pressed('KeyN')) this.advanceTime(2);
 
     // Start the first job by walking into Rosa's garage.
     if (!this.missions.active && this.missionsDoneCount === 0 && this.missions.current === -1) {
@@ -381,8 +229,7 @@ export class World {
 
     updatePlayer(this, dt, input, mouseWorld);
     this.playerSpeed = this.player.speed;
-    this.updateTaxi(dt);
-    this.updateHeli(dt);
+    this.taxi.update(this, dt, input);
 
     // The armored van runs its route until it is stopped. Its driver steers
     // back onto Bayfront Ave after being shoved off it by a ram.
@@ -504,8 +351,7 @@ export class World {
 
   updateWanted(dt) {
     if (this.heat <= 0) { this.wanted = 0; return; }
-    const nearPolice = this.heli
-      || this.cars.some((c) => c.type === 'police' && !c.dead && Math.hypot(c.x - this.player.x, c.y - this.player.y) < 450)
+    const nearPolice = this.cars.some((c) => c.type === 'police' && !c.dead && Math.hypot(c.x - this.player.x, c.y - this.player.y) < 450)
       || this.peds.some((pd) => pd.state === 'cop' && Math.hypot(pd.x - this.player.x, pd.y - this.player.y) < 450);
     if (!nearPolice && this.time - this.lastCrimeAt > 8) {
       this.heat = Math.max(0, this.heat - TUNE.wantedDecayPerSec * dt);
@@ -572,9 +418,6 @@ export class World {
     return writeSave({
       money: this.player.money,
       missionsDone: this.missionsDoneCount,
-      taxiEarned: this.taxi.earned,
-      clockHours: this.clockHours,
-      weather: this.weather.id,
       weapon: this.player.weapon,
       ammo: this.player.ammo,
       armor: this.player.armor,

@@ -21,16 +21,3 @@ export function range(rng, min, max) {
 export function rangeInt(rng, min, max) {
   return min + Math.floor(rng() * (max - min + 1));
 }
-
-// Small deterministic helpers the new day/night, weather and taxi code shares.
-export function clamp(v, min, max) {
-  return v < min ? min : v > max ? max : v;
-}
-
-export function lerp(a, b, t) {
-  return a + (b - a) * t;
-}
-
-export function chance(rng, p) {
-  return rng() < p;
-}

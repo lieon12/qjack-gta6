@@ -4,6 +4,7 @@
 import { WORLD, TUNE, PLACES } from './config.js';
 import { collideCircle } from './city.js';
 import { spawnParticles, damageCar } from './entities.js';
+import { modelStats } from './vehicles.js';
 
 export function makePlayer(x, y) {
   return {
@@ -88,16 +89,14 @@ function updateDriving(world, dt, input) {
   const p = world.player;
   const car = p.car;
   const mv = input.moveVector();
+  // Each vehicle model drives its own way; rain and storm cut the grip.
+  const stats = modelStats(car);
+  const grip = world.sky ? world.sky.grip() : 1;
+  const topSpeed = stats.top * grip;
   const forward = mv.y < 0 ? 1 : mv.y > 0 ? -0.5 : 0;
   const steering = mv.x;
-  // Each vehicle model drives differently, and rain cuts grip: a Speedster in
-  // the rain still outruns a Van in the dry, but neither grips like the dry.
-  const grip = world.weather ? world.weather.grip : 1;
-  const maxSpeed = (car.modelMax || TUNE.carMaxSpeed) * (0.75 + 0.25 * grip);
-  const accel = (car.modelAccel || TUNE.carAccel) * grip;
-  const turn = car.modelTurn || TUNE.carTurn;
   if (forward !== 0) {
-    car.speed += forward * accel * dt;
+    car.speed += forward * stats.accel * dt;
   } else {
     car.speed -= Math.sign(car.speed) * Math.min(Math.abs(car.speed), 240 * dt);
   }
@@ -110,8 +109,8 @@ function updateDriving(world, dt, input) {
       });
     }
   }
-  car.speed = Math.max(-TUNE.carReverseMax, Math.min(maxSpeed, car.speed));
-  const turnRate = turn * Math.min(1, Math.abs(car.speed) / 140) * Math.sign(car.speed || 1);
+  car.speed = Math.max(-TUNE.carReverseMax, Math.min(topSpeed, car.speed));
+  const turnRate = stats.turn * Math.min(1, Math.abs(car.speed) / 140) * Math.sign(car.speed || 1);
   car.angle += steering * turnRate * dt;
   const prevX = car.x;
   const prevY = car.y;
@@ -183,10 +182,8 @@ export function enterCar(world, car) {
   p.inCar = car;
   p.car = car;
   car.type = car.type === 'police' ? 'police' : 'player';
-  if (car.modelId === 'taxi') {
-    world.events.push({ type: 'banner', text: 'Taxi — press T to take fares', color: '#ffd34e' });
-  } else {
-    world.events.push({ type: 'banner', text: `${car.modelName || 'Car'} — ${car.modelMax || ''} top speed`, color: '#e8e8e8' });
+  if (car.model === 'taxi') {
+    world.events.push({ type: 'banner', text: 'Taxi — press T near a pedestrian to pick them up', color: '#ffd34e' });
   }
   world.audio.ensure();
 }

@@ -34,10 +34,6 @@ export class Input {
   }
 
   down(...codes) { return codes.some((c) => this.keys.has(c)); }
-  // Alias the world and HUD read as "is the key held right now".
-  isDown(...codes) { return this.down(...codes); }
-  // True when any of the given keys was just pressed this frame.
-  pressedAny(...codes) { return codes.some((c) => this.pressed(c)); }
   // Edge-triggered: true once for the frame the key went down.
   pressed(code) {
     if (this.keys.has(code) && !this._prev?.has(code)) return true;

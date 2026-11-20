@@ -1,6 +1,6 @@
 // The city of Solmar Bay: roads, blocks, buildings, palms, the park and the
 // docks, all generated from a seed so every player gets the same city.
-import { WORLD, STREETS_Y, AVENUES_X, ROAD_W, BEACH_Y, WATER_Y, PARK, DOCKS, PALETTE, DISTRICTS, STRIP, CASINO_ROW, MARINA } from './config.js';
+import { WORLD, STREETS_Y, AVENUES_X, ROAD_W, BEACH_Y, WATER_Y, PARK, DOCKS, PALETTE } from './config.js';
 import { mulberry32, pick, range, rangeInt } from './random.js';
 
 function onRoad(x, y, margin = 0) {
@@ -76,46 +76,17 @@ export function buildCity(seed = 20261118) {
     });
   }
 
-  // New districts, built from the same seed so they are identical every run.
-  // Casino row: two tall gold towers with lit signs, standing clear of the road grid.
-  const casinoTowers = [
-    { x: 2450, y: 720, w: 170, h: 130, roof: '#ffd34e', wall: '#b8860b', tall: 5, hotel: false, sign: 'CASINO' },
-    { x: 2950, y: 720, w: 150, h: 120, roof: '#e86fb8', wall: '#8a2f63', tall: 4, hotel: false, sign: 'SLOTS' },
-  ];
-  for (const t of casinoTowers) buildings.push(t);
-  // The Strip: neon-fronted blocks along Palm Row, kept off the roads.
-  const stripNeon = [];
-  for (let i = 0; i < 8; i += 1) {
-    stripNeon.push({
-      x: STRIP.x + 60 + i * 115, y: STRIP.y + 150, w: 84, h: 110,
-      color: ['#e86fb8', '#ffd34e', '#7fc4d9', '#7fb069'][i % 4],
-    });
-  }
-  // Marina: wooden piers reaching into the water and moored boats.
+  // The marina: wooden piers reaching into the water, with boats moored off them.
   const piers = [];
   const boats = [];
   for (let i = 0; i < 3; i += 1) {
-    const px = MARINA.x + 60 + i * 240;
-    piers.push({ x: px, y: 2380, w: 26, h: 150 });
-    boats.push({ x: px + 60, y: 2550, angle: range(rng, -0.3, 0.3), color: ['#e8e8e8', '#3d7bd9', '#f2c14e'][i % 3] });
-    boats.push({ x: px + 150, y: 2525, angle: range(rng, -0.3, 0.3), color: '#d94f3d' });
+    const px = 2920 + i * 220;
+    piers.push({ x: px, y: 2470, w: 26, h: 110 });
+    boats.push({ x: px + 60, y: 2570, angle: 0.1 * (i - 1), color: i === 1 ? '#e8e8e8' : '#5b8dbf' });
+    boats.push({ x: px + 120, y: 2540, angle: -0.08 * i, color: '#d94f3d' });
   }
 
-  return { buildings, palms, trees, containers, seed, casinoTowers, stripNeon, piers, boats };
-}
-
-// Which named district contains this point; the newer districts win overlaps
-// so the Strip, Casino and Marina read correctly on the HUD and minimap.
-export function districtAt(x, y) {
-  for (let i = DISTRICTS.length - 1; i >= 0; i -= 1) {
-    const d = DISTRICTS[i];
-    if (x >= d.x && x < d.x + d.w && y >= d.y && y < d.y + d.h) return d.name;
-  }
-  return 'Solmar Bay';
-}
-
-export function isInDistrict(x, y, name) {
-  return districtAt(x, y) === name;
+  return { buildings, palms, trees, containers, piers, boats, seed };
 }
 
 // True when the point is inside a building, the park pond, or the water.

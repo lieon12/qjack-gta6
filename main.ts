@@ -1,5 +1,3 @@
-// Solmar Bay revision (day/night + weather, six vehicle models, police helicopter,
-// taxi fares, missions 6-8 "Tiburon Rising", Strip / Casino / Marina districts).
 // A working gta6-01 entry (Node 22, standard library only): the game is this directory's
 // game/ folder, plain static files a desktop browser loads offline (game/index.html and its ES
 // modules, no library and no network request), and the program hands it in. It copies game/ from
@@ -32,12 +30,7 @@ cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
 // holds text only. Turn each one back into a real image file under
 // /output/screenshots/ at grade time.
 mkdirSync(join(out, 'screenshots'), { recursive: true });
-// The revision ships exactly four screenshots, all real renders of the game.
-const shotFiles = readdirSync(join(here, 'shots-b64')).filter((f) => f.endsWith('.b64'));
-if (shotFiles.length < 3 || shotFiles.length > 4) {
-  throw new Error(`expected 3-4 screenshots in shots-b64/, found ${shotFiles.length}`);
-}
-for (const file of shotFiles) {
+for (const file of readdirSync(join(here, 'shots-b64'))) {
   if (!file.endsWith('.b64')) continue;
   const image = file.slice(0, -'.b64'.length);
   const bytes = Buffer.from(readFileSync(join(here, 'shots-b64', file), 'utf8').trim(), 'base64');
