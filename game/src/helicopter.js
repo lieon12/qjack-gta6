@@ -1,61 +1,53 @@
-// The police helicopter. At one or two wanted stars it patrols high over
-// the city, circling wide; at three stars and up it drops into pursuit,
-// hanging over the player with its searchlight on them so the chase is
-// visible even when the patrol cars fall behind. When the heat is gone it
-// climbs away and leaves.
-export class PoliceHeli {
-  constructor() {
-    this.active = false;
-    this.mode = 'away'; // away | patrol | pursuit
-    this.x = 0;
-    this.y = 0;
-    this.orbit = 0;
-    this.alt = 1; // 1 = high, lower when pursuing
-    this.spotX = 0;
-    this.spotY = 0;
-  }
+// The Solmar Bay PD helicopter: it joins the chase from three wanted stars.
+// It never lands. It hangs in the air above the player, drifts on a slow
+// circle so it never sits dead still, and trains a searchlight on the
+// player's position — the bright ring on the ground is the thing the foot
+// cops steer toward. Shooting it down is not a thing; losing the cops on the
+// ground is what makes it leave.
+import { TUNE } from './config.js';
 
-  update(world, dt) {
-    const p = world.player;
-    const px = p.inCar ? p.car.x : p.x;
-    const py = p.inCar ? p.car.y : p.y;
-    const wanted = world.wanted;
+export function makeHeli(x, y, id) {
+  return {
+    kind: 'heli',
+    x, y,
+    angle: 0, // the direction the nose points
+    rotor: 0, // rotor spin, for the drawing
+    drift: Math.random() * Math.PI * 2, // phase of the slow circling drift
+    spotlightR: 90, // radius of the searchlight ring on the ground
+    id: id || 0,
+  };
+}
 
-    if (wanted >= 3) this.mode = 'pursuit';
-    else if (wanted >= 1) this.mode = 'patrol';
-    else this.mode = 'away';
+// One helicopter at most: it is the eye in the sky, not a swarm.
+export function spawnHeli(world) {
+  const p = world.player;
+  const px = p.inCar ? p.car.x : p.x;
+  const py = p.inCar ? p.car.y : p.y;
+  const heli = makeHeli(px - 120, py - 180, world.nextId());
+  world.helis.push(heli);
+  world.events.push({ type: 'banner', text: 'Police helicopter overhead — lose the cops!', color: '#ff5a4e' });
+  return heli;
+}
 
-    if (this.mode === 'away') {
-      if (this.active) {
-        // Climb away from the player until it is out of sight, then switch off.
-        const d = Math.hypot(this.x - px, this.y - py);
-        this.alt = Math.min(2, this.alt + dt * 0.5);
-        this.x += ((this.x - px) / Math.max(1, d)) * 260 * dt;
-        this.y += ((this.y - py) / Math.max(1, d)) * 260 * dt;
-        if (d > 1400) this.active = false;
-      }
-      return;
-    }
+export function updateHeli(world, heli, dt) {
+  const p = world.player;
+  const px = p.inCar ? p.car.x : p.x;
+  const py = p.inCar ? p.car.y : p.y;
+  // Drift in a slow circle around the player, 130 px out, and keep the nose
+  // on them; the rotor spins fast the whole time.
+  heli.drift += dt * 0.5;
+  const tx = px + Math.cos(heli.drift) * 130;
+  const ty = py + Math.sin(heli.drift) * 130 - 40;
+  heli.x += (tx - heli.x) * Math.min(1, dt * 1.6);
+  heli.y += (ty - heli.y) * Math.min(1, dt * 1.6);
+  heli.angle = Math.atan2(py - heli.y, px - heli.x);
+  heli.rotor += dt * 26;
+  // The searchlight tightens on the player as the wanted level climbs.
+  heli.spotlightR = 110 - world.wanted * 6;
+}
 
-    if (!this.active) {
-      // Arrive from the edge of the sky, above the player.
-      this.active = true;
-      this.x = px + 600;
-      this.y = py - 600;
-      this.orbit = Math.atan2(this.y - py, this.x - px);
-      this.alt = 1.6;
-    }
-    const radius = this.mode === 'pursuit' ? 190 : 520;
-    const speed = this.mode === 'pursuit' ? 0.55 : 0.25;
-    this.orbit += speed * dt;
-    const tx = px + Math.cos(this.orbit) * radius;
-    const ty = py + Math.sin(this.orbit) * radius;
-    this.x += (tx - this.x) * Math.min(1, dt * 1.6);
-    this.y += (ty - this.y) * Math.min(1, dt * 1.6);
-    const targetAlt = this.mode === 'pursuit' ? 1 : 1.6;
-    this.alt += (targetAlt - this.alt) * Math.min(1, dt * 1.2);
-    // The searchlight stays pinned on the player while pursuing.
-    this.spotX = px;
-    this.spotY = py;
-  }
+// How many helicopters the wanted level calls for: none below three stars,
+// one from three up. The world checks this every step.
+export function heliTargetCount(wanted) {
+  return wanted >= TUNE.heliWanted ? 1 : 0;
 }

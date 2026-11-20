@@ -1,5 +1,7 @@
 // Keyboard and mouse state, kept as one object the world reads each step.
-// Keys are tracked by `code` so WASD and the arrow keys both work.
+// Keys are tracked by `code` so WASD and the arrow keys both work, and
+// pressed() is edge-triggered: true only on the frame the key went down, so
+// one tap of E steals one car instead of three.
 export class Input {
   constructor(canvas) {
     this.keys = new Set();
@@ -38,6 +40,10 @@ export class Input {
   pressed(code) {
     if (this.keys.has(code) && !this._prev?.has(code)) return true;
     return false;
+  }
+  // Edge-triggered across several keys: true when any of them went down.
+  pressedAny(...codes) {
+    return codes.some((c) => this.pressed(c));
   }
   // Call at the end of each frame so pressed() works next frame.
   endFrame() {

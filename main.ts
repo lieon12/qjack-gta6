@@ -1,15 +1,23 @@
-// A working gta6-01 entry (Node 22, standard library only): the game is this directory's
-// game/ folder, plain static files a desktop browser loads offline (game/index.html and its ES
-// modules, no library and no network request), and the program hands it in. It copies game/ from
-// beside this file to /output, turns the base64 screenshot texts in shots-b64/ back into real
-// image files in /output/screenshots/ (the images travel as base64 because the repository holds
-// text only), and writes /output/dossier.json, the summary the judge reads, with the vendored
-// make.fun library. Only the plumbing, not an open world: Block
-// Dodger, a plain 2D canvas game where a paddle dodges falling blocks and catches coins, with a
-// title screen, score, lives and levels, game over and restart, flat colours and no sound. Build
-// your own open-world crime game in its place (three.js or any library you vendor under game/),
-// put your 3 or 4 PNG or JPEG screenshots in shots-b64/ as base64 text (one .b64 file per image,
-// named <image>.b64; the first by name is the cover) and run it.
+// SOLMAR BAY — a working gta6-01 entry (Node 22, standard library only).
+// The game is this directory's game/ folder: plain static files a desktop
+// browser loads offline (game/index.html and its ES modules, no library and
+// no network request). This file hands it in: it copies game/ from beside
+// this file to /output, turns the base64 screenshot texts in shots-b64/ back
+// into real image files in /output/screenshots/ (the images travel as base64
+// because the repository holds text only), and writes /output/dossier.json,
+// the summary the judge reads, with the vendored make.fun library.
+//
+// The game itself: a top-down open-world crime game in an original coastal
+// city. On foot or behind the wheel of one of six vehicle models — a Comet
+// GT, a sedan, a hatchback, a pickup, a limo, or a City Taxi you can hail
+// for a metered fare — through traffic and pedestrians, under a sky that
+// turns from dawn to night while the weather drifts between clear, overcast,
+// rain and fog. A five-star wanted level brings police cars, foot cops and,
+// from three stars, a helicopter with a searchlight. Eight story missions
+// for Mama Rosa run from the first car theft to the "Tiburón Rising" finale
+// on the neon Strip, with a stop at the Marina's boats on the way. There is
+// combat, a weapon and armor shop, cash pickups, a hospital, a minimap, a
+// HUD with a clock, save/continue, and synthesized sound and music.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:

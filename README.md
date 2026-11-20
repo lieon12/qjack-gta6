@@ -4,4 +4,24 @@
 
 # Solmar Bay — Open World Crime
 
-Solmar Bay is a complete top-down open-world crime game set in an original sun-soaked coastal city: explore on foot or steal and drive cars through traffic and pedestrians, raise a five-star wanted level with police cars, foot cops and a police helicopter who chase and arrest you, and run eight story missions for Mama Rosa — from your first car theft to stopping an armored van, taking back the Strip, and facing El Tiburón at the Marina in the "Tiburón Rising" arc — with combat, a weapon and armor shop, cash pickups, a hospital, a minimap, a HUD, save/continue, a day/night cycle with changing weather, six drivable vehicle models, taxi fares paid by distance, and the Strip, Casino Row and Marina districts, all with synthesized sound and music, in plain static files with no network request.
+Solmar Bay is a complete top-down open-world crime game set in an original sun-soaked coastal city: explore on foot or steal and drive one of six vehicle models — Comet GT, sedan, hatchback, pickup, limo, or a City Taxi — through traffic and pedestrians, raise a five-star wanted level with police cars, foot cops and, from three stars, a helicopter with a searchlight, and run eight story missions for Mama Rosa — from your first car theft to stopping an armored van, collecting protection money on the neon Strip, running a crate from the Marina, and ending El Tiburón himself in the "Tiburón Rising" finale.
+
+The city lives while you play: a clock runs from dawn to night, the weather drifts between clear skies, overcast, rain and fog, and the HUD shows the time, the weather and the district you are standing in — Downtown, Calle Sol, the Docks, Parkside, Beachfront, the Strip, or the Marina with its boats and pier. Hail a taxi with T and ride the meter to your objective, or steal the cab instead. Combat, a weapon and armor shop, cash pickups, a hospital, a minimap, save/continue, and synthesized sound and music round it out, all in plain static files with no network request.
+
+## Play
+
+Serve `game/` with any static file server and open `index.html` in desktop Chrome. Keyboard and mouse only.
+
+- **WASD** move / drive · **Shift** sprint · **Space** punch / brake
+- **E** steal or enter a car · **T** hail a taxi · **F / click** shoot
+- **1 / 2** fists / pistol · **P / Esc** pause · **S** save · **M** music
+
+## Build
+
+`main.ts` (Node 22, standard library only) copies `game/` to `/output`, decodes the base64 screenshots in `shots-b64/` into `/output/screenshots/`, and writes `/output/dossier.json` with the vendored make.fun library:
+
+```sh
+mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+```
+
+Screenshots are taken in the browser with `?shot=chase|street|heist|beach` — a dusk chase under the helicopter, a rainy downtown street, the night heist, and a dawn drive along Ocean Drive.

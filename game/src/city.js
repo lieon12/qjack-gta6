@@ -1,6 +1,9 @@
-// The city of Solmar Bay: roads, blocks, buildings, palms, the park and the
-// docks, all generated from a seed so every player gets the same city.
-import { WORLD, STREETS_Y, AVENUES_X, ROAD_W, BEACH_Y, WATER_Y, PARK, DOCKS, PALETTE } from './config.js';
+// The city of Solmar Bay: roads, blocks, buildings, palms, the park, the
+// docks, the neon Strip and the Marina, all generated from a seed so every
+// player gets the same city. Buildings on the Strip get a casino flag, so
+// the renderer can light their neon; the Marina gets moored boats and a
+// wooden pier reaching into the water.
+import { WORLD, STREETS_Y, AVENUES_X, ROAD_W, BEACH_Y, WATER_Y, PARK, DOCKS, STRIP, MARINA, PALETTE } from './config.js';
 import { mulberry32, pick, range, rangeInt } from './random.js';
 
 function onRoad(x, y, margin = 0) {
@@ -10,12 +13,17 @@ function onRoad(x, y, margin = 0) {
   return false;
 }
 
+function inRect(x, y, r) {
+  return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+}
+
 export function buildCity(seed = 20261118) {
   const rng = mulberry32(seed);
   const buildings = [];
   const palms = [];
   const containers = [];
   const trees = [];
+  const boats = [];
 
   // Buildings fill every block between the streets and avenues.
   const xs = [0, ...AVENUES_X, WORLD.w];
@@ -32,6 +40,7 @@ export function buildCity(seed = 20261118) {
       if (bx < DOCKS.x + DOCKS.w && bx + bw > DOCKS.x && by < DOCKS.y + DOCKS.h && by + bh > DOCKS.y) continue;
       const downtown = bx < 1300 && by < 1000;
       const beachfront = by > 1800;
+      const onStrip = inRect(bx + bw / 2, by + bh / 2, STRIP);
       const count = downtown ? rangeInt(rng, 2, 4) : beachfront ? rangeInt(rng, 1, 2) : rangeInt(rng, 1, 3);
       for (let k = 0; k < count; k += 1) {
         const w = range(rng, 70, Math.min(200, bw / count));
@@ -43,8 +52,10 @@ export function buildCity(seed = 20261118) {
           x, y, w, h,
           roof: PALETTE.buildingRoof[ci],
           wall: PALETTE.buildingWall[ci],
-          tall: downtown ? rangeInt(rng, 2, 4) : beachfront ? rangeInt(rng, 2, 3) : 1,
+          tall: onStrip ? rangeInt(rng, 3, 5) : downtown ? rangeInt(rng, 2, 4) : beachfront ? rangeInt(rng, 2, 3) : 1,
           hotel: beachfront && rng() < 0.5,
+          // A Strip building is a casino: tall, and lit in neon at night.
+          casino: onStrip && rng() < 0.75,
         });
       }
     }
@@ -76,18 +87,24 @@ export function buildCity(seed = 20261118) {
     });
   }
 
-  // The marina: wooden piers reaching into the water, with boats moored off them.
-  const piers = [];
-  const boats = [];
-  for (let i = 0; i < 3; i += 1) {
-    const px = 2920 + i * 220;
-    piers.push({ x: px, y: 2470, w: 26, h: 110 });
-    boats.push({ x: px + 60, y: 2570, angle: 0.1 * (i - 1), color: i === 1 ? '#e8e8e8' : '#5b8dbf' });
-    boats.push({ x: px + 120, y: 2540, angle: -0.08 * i, color: '#d94f3d' });
+  // Boats moored in the Marina, bobbing just off the pier.
+  const boatColors = ['#e8e8e8', '#d94f3d', '#3d7bd9', '#e8c53d', '#7fb069'];
+  for (let i = 0; i < 5; i += 1) {
+    boats.push({
+      x: MARINA.x + 120 + i * 130 + range(rng, -20, 20),
+      y: WATER_Y + 34 + (i % 2) * 26,
+      angle: range(rng, -0.2, 0.2),
+      len: range(rng, 52, 74),
+      color: boatColors[i % boatColors.length],
+      bob: rng() * Math.PI * 2,
+    });
   }
 
-  return { buildings, palms, trees, containers, piers, boats, seed };
+  return { buildings, palms, trees, containers, boats, seed };
 }
+
+// The Marina pier: a wooden walkway from the sand out over the water.
+export const PIER = { x: 3185, y: 2380, w: 30, h: 150 };
 
 // True when the point is inside a building, the park pond, or the water.
 export function blockedAt(city, x, y) {

@@ -1,8 +1,10 @@
 // The HUD and the menus: wanted stars, health, money, the minimap, the
-// mission objective, prompts, banners, and the title / pause / game-over /
+// mission objective, the clock and weather, the district you are standing
+// in, the taxi meter, prompts, banners, and the title / pause / game-over /
 // dialog screens. Everything is drawn on the same canvas as the world, so
 // the screenshots show the game exactly as a player sees it.
-import { WORLD, TUNE, PLACES, districtAt } from './config.js';
+import { WORLD, TUNE } from './config.js';
+import { modelStats } from './vehicles.js';
 
 function panel(ctx, x, y, w, h, alpha = 0.55) {
   ctx.fillStyle = `rgba(10,12,18,${alpha})`;
@@ -24,6 +26,14 @@ export function drawHUD(ctx, world, viewW, viewH) {
     ctx.fillStyle = i < world.wanted ? '#ffd34e' : 'rgba(255,255,255,0.25)';
     ctx.fillText('★', 24 + i * 34, 35);
   }
+  // Police helicopter overhead: say so, under the stars.
+  if (world.helis.length > 0) {
+    panel(ctx, 14, 60, 190, 26, 0.55);
+    ctx.fillStyle = '#ff5a4e';
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('HELI OVERHEAD', 24, 74);
+  }
 
   // Mission objective, top-centre.
   const ow = Math.min(viewW - 420, 560);
@@ -33,20 +43,15 @@ export function drawHUD(ctx, world, viewW, viewH) {
   ctx.textAlign = 'center';
   ctx.fillText(obj.text, viewW / 2, 35);
 
-  // Clock, weather and district, under the wanted stars.
-  if (world.sky) {
-    const district = districtAt(p.x, p.y);
-    panel(ctx, 14, 62, 250, 26);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 13px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`${world.sky.label()} — ${district}`, 24, 80);
-    if (world.heli && world.heli.active && world.heli.mode === 'pursuit') {
-      ctx.fillStyle = '#ff5a4e';
-      ctx.font = 'bold 13px system-ui, sans-serif';
-      ctx.fillText('POLICE HELI OVERHEAD', 24, 104);
-    }
-  }
+  // Clock, weather and district, top-right above the minimap.
+  const sky = world.sky;
+  const skyText = `${sky.clockText()}  •  ${sky.phase()}  •  ${sky.weatherLabel()}  •  ${world.district}`;
+  ctx.font = 'bold 13px system-ui, sans-serif';
+  const sw = ctx.measureText(skyText).width + 24;
+  panel(ctx, viewW - sw - 14, 14, sw, 26, 0.55);
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'right';
+  ctx.fillText(skyText, viewW - 26, 28);
 
   drawMinimap(ctx, world, viewW);
 
@@ -72,9 +77,9 @@ export function drawHUD(ctx, world, viewW, viewH) {
   const weapon = p.weapon === 'pistol' ? `Pistol  ${p.ammo} ammo` : 'Fists';
   ctx.fillText(weapon, 120, viewH - 28);
 
-  // Speed, bottom-right, while driving.
+  // Speed and the car model, bottom-right, while driving.
   if (p.inCar && p.car) {
-    panel(ctx, viewW - 150, viewH - 76, 136, 62);
+    panel(ctx, viewW - 190, viewH - 76, 176, 62);
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 30px system-ui, sans-serif';
     ctx.textAlign = 'right';
@@ -83,11 +88,28 @@ export function drawHUD(ctx, world, viewW, viewH) {
     ctx.fillStyle = '#bbb';
     ctx.fillText('km/h', viewW - 40, viewH - 26);
     ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffd34e';
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.fillText(modelStats(p.car.model).name, viewW - 176, viewH - 26);
     const hp = Math.max(0, p.car.health);
     ctx.fillStyle = '#333';
-    ctx.fillRect(viewW - 136, viewH - 66, 108, 8);
+    ctx.fillRect(viewW - 176, viewH - 66, 108, 8);
     ctx.fillStyle = hp > 40 ? '#7fd67f' : '#ff5a4e';
-    ctx.fillRect(viewW - 136, viewH - 66, 108 * (hp / p.car.maxHealth), 8);
+    ctx.fillRect(viewW - 176, viewH - 66, 108 * (hp / p.car.maxHealth), 8);
+  }
+
+  // Taxi meter, bottom-centre above the prompt, while riding.
+  if (world.taxiRide) {
+    const ride = world.taxiRide;
+    const text = ride.state === 'pickup'
+      ? 'Taxi on its way…'
+      : `TAXI  $${ride.fare}  —  to ${ride.dest.name}  (E to get out)`;
+    ctx.font = 'bold 15px system-ui, sans-serif';
+    const w = ctx.measureText(text).width + 28;
+    panel(ctx, (viewW - w) / 2, viewH - 66, w, 26, 0.65);
+    ctx.fillStyle = '#ffd34e';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, viewW / 2, viewH - 52);
   }
 
   // Context prompt, bottom-centre.
@@ -95,11 +117,12 @@ export function drawHUD(ctx, world, viewW, viewH) {
   if (world.shopPrompt) prompt = world.shopPrompt;
   else if (!p.inCar) {
     const car = nearestCarForPrompt(world);
-    if (car) prompt = car.type === 'police' ? 'E — Take the police car' : 'E — Steal car';
+    if (car) prompt = car.type === 'police' ? 'E — Take the police car' : car.type === 'taxi' ? 'E — Steal taxi  •  T — Hail a cab' : 'E — Steal car';
+    else if (nearTaxiForPrompt(world)) prompt = 'T — Hail a taxi';
     else if (p.weapon === 'pistol') prompt = 'F / Click — Shoot    Space — Punch    Shift — Sprint';
-    else prompt = 'WASD — Move    Shift — Sprint    Space — Punch    E — Enter car';
-  } else if (p.car && p.car.model === 'taxi' && !world.taxi.active) {
-    prompt = 'WASD — Drive    Space — Brake    E — Leave car    T — Pick up passenger';
+    else prompt = 'WASD — Move    Shift — Sprint    Space — Punch    E — Enter car    T — Hail taxi';
+  } else if (world.taxiRide && world.taxiRide.state === 'ride') {
+    prompt = 'Riding in the taxi — E to get out early';
   } else {
     prompt = 'WASD — Drive    Space — Brake    E — Leave car';
   }
@@ -110,18 +133,6 @@ export function drawHUD(ctx, world, viewW, viewH) {
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
     ctx.fillText(prompt, viewW / 2, viewH - 20);
-  }
-
-  // Taxi fare, above the prompt bar, while a ride is running.
-  const taxi = world.taxi ? world.taxi.status(world) : null;
-  if (taxi) {
-    const text = `TAXI  →  ${taxi.dest}   ·   fare $${taxi.fare}   ·   ${taxi.metresLeft}m to go`;
-    ctx.font = 'bold 14px system-ui, sans-serif';
-    const w = ctx.measureText(text).width + 28;
-    panel(ctx, (viewW - w) / 2, viewH - 66, w, 26, 0.6);
-    ctx.fillStyle = '#ffd34e';
-    ctx.textAlign = 'center';
-    ctx.fillText(text, viewW / 2, viewH - 48);
   }
 
   // Banner (mission complete, wanted, pickups), centre.
@@ -178,6 +189,15 @@ function nearestCarForPrompt(world) {
   return best;
 }
 
+function nearTaxiForPrompt(world) {
+  const p = world.player;
+  for (const car of world.cars) {
+    if (car.dead || car.type !== 'taxi') continue;
+    if (Math.hypot(car.x - p.x, car.y - p.y) < 120) return true;
+  }
+  return false;
+}
+
 function drawMinimap(ctx, world, viewW) {
   const mw = 200;
   const mh = Math.round((200 * WORLD.h) / WORLD.w);
@@ -204,24 +224,21 @@ function drawMinimap(ctx, world, viewW) {
   for (const x of [300, 800, 1300, 1800, 2300, 2800, 3300]) {
     ctx.beginPath(); ctx.moveTo(mx + x * sx, my); ctx.lineTo(mx + x * sx, my + mh); ctx.stroke();
   }
+  // The Strip, in pink, and the Marina, in blue.
+  ctx.fillStyle = 'rgba(255,79,216,0.35)';
+  ctx.fillRect(mx + 2300 * sx, my, 500 * sx, 600 * sy);
+  ctx.fillStyle = 'rgba(127,196,217,0.5)';
+  ctx.fillRect(mx + 2800 * sx, my + 1800 * sy, 800 * sx, 580 * sy);
   // Cars and police.
   for (const car of world.cars) {
     if (car.dead) continue;
-    ctx.fillStyle = car.type === 'police' ? '#ff2a2a' : 'rgba(255,255,255,0.85)';
+    ctx.fillStyle = car.type === 'police' ? '#ff2a2a' : car.type === 'taxi' ? '#f2c14e' : 'rgba(255,255,255,0.85)';
     ctx.fillRect(mx + car.x * sx - 1.5, my + car.y * sy - 1.5, 3, 3);
   }
-  // The new quarters, marked on the map.
-  const quarterDots = [
-    [PLACES.strip, '#ff5ad0'],
-    [PLACES.casino, '#ffd34e'],
-    [PLACES.marina, '#2fa8c9'],
-  ];
-  for (const [place, color] of quarterDots) {
-    ctx.fillStyle = color;
-    ctx.beginPath(); ctx.arc(mx + place.x * sx, my + place.y * sy, 4, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+  // Helicopters.
+  for (const heli of world.helis) {
+    ctx.fillStyle = '#ff2a2a';
+    ctx.beginPath(); ctx.arc(mx + heli.x * sx, my + heli.y * sy, 3, 0, Math.PI * 2); ctx.fill();
   }
   // Mission marker.
   const obj = world.missions.objective();
@@ -295,8 +312,8 @@ export function drawTitle(ctx, world, viewW, viewH, hasSave) {
   ctx.fillText('Steal. Drive. Survive. Own the city.', viewW / 2, viewH * 0.42);
   ctx.font = '16px system-ui, sans-serif';
   ctx.fillStyle = 'rgba(255,255,255,0.9)';
-  ctx.fillText('Danny Vega is new in town. Mama Rosa has work — five jobs, one big score.', viewW / 2, viewH * 0.52);
-  ctx.fillText('WASD move / drive  •  E steal car  •  Space punch / brake  •  F shoot  •  P pause', viewW / 2, viewH * 0.58);
+  ctx.fillText('Danny Vega is new in town. Mama Rosa has work — eight jobs, one big score, and El Tiburón to end.', viewW / 2, viewH * 0.52);
+  ctx.fillText('WASD move / drive  •  E steal car  •  T hail a taxi  •  Space punch / brake  •  F shoot  •  P pause', viewW / 2, viewH * 0.58);
   const blink = Math.floor(world.time * 2) % 2 === 0;
   if (blink) {
     ctx.font = 'bold 24px system-ui, sans-serif';
@@ -318,7 +335,7 @@ export function drawPause(ctx, viewW, viewH) {
   ctx.font = '18px system-ui, sans-serif';
   ctx.fillStyle = '#ddd';
   ctx.fillText('P / Esc — resume      S — save game      M — music on/off', viewW / 2, viewH * 0.5);
-  ctx.fillText('WASD move / drive  •  E steal car  •  Space punch / brake  •  F shoot', viewW / 2, viewH * 0.56);
+  ctx.fillText('WASD move / drive  •  E steal car  •  T hail a taxi  •  Space punch / brake  •  F shoot', viewW / 2, viewH * 0.56);
 }
 
 export function drawGameOver(ctx, world, viewW, viewH) {

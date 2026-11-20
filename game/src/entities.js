@@ -1,22 +1,29 @@
 // Cars, pedestrians, police and particles: the moving life of Solmar Bay.
 // Traffic follows the road grid, pedestrians walk the sidewalks and flee from
-// danger, and the police answer the player's wanted level.
+// danger, taxis cruise for fares, and the police answer the player's wanted
+// level. Every car carries one of the six vehicle models, so how it drives
+// and how it looks both come from the same model.
 import { WORLD, STREETS_Y, AVENUES_X, PALETTE, TUNE } from './config.js';
 import { collideCircle, randomRoadPoint, nearestRoadPoint } from './city.js';
+import { modelStats, pickModel, pickParkedModel } from './vehicles.js';
 import { pick, range } from './random.js';
-import { modelById, randomModel } from './vehicles.js';
 
 export function makeCar(x, y, angle, opts = {}) {
-  const model = modelById(opts.model || randomModel(opts.rng).id);
+  const model = opts.model || (opts.type === 'parked' ? pickParkedModel(opts.rng || Math.random) : pickModel(opts.rng || Math.random, opts.type));
+  const stats = modelStats(model);
   return {
     kind: 'car',
-    type: opts.type || 'traffic', // traffic | parked | police | getaway | van
-    model: opts.model || model.id,
+    type: opts.type || 'traffic', // traffic | parked | police | getaway | van | taxi | player
+    model,
     x, y, angle,
     speed: opts.speed || 0,
-    color: opts.color || model.color,
-    health: opts.health ?? 120,
-    maxHealth: opts.health ?? 120,
+    color: opts.color || pick(opts.rng || Math.random, PALETTE.carColors),
+    topSpeed: stats.top,
+    accel: stats.accel,
+    turn: stats.turn,
+    len: stats.len,
+    health: opts.health ?? stats.health,
+    maxHealth: opts.health ?? stats.health,
     driver: opts.driver ?? true, // a traffic car with a driver can be carjacked
     smoking: false,
     dead: false,
@@ -61,6 +68,8 @@ export function spawnParticles(world, x, y, opts = {}) {
 }
 
 // --- Traffic: drive the road grid, turn at intersections, slow for the car ahead.
+// Taxis cruise the same way until one is hailed; a hailed cab is driven by
+// the taxi module instead, so this update leaves it alone.
 function nextWaypoint(car, rng) {
   const dirs = [0, 1, 2, 3].filter((d) => d !== ((car.dir + 2) % 4)); // never U-turn
   car.dir = pick(rng, dirs);
@@ -82,7 +91,8 @@ function nextWaypoint(car, rng) {
 }
 
 export function updateTrafficCar(world, car, dt) {
-  if (car.type !== 'traffic') return;
+  if (car.type !== 'traffic' && car.type !== 'taxi') return;
+  if (world.taxiRide && world.taxiRide.taxi === car) return; // hailed: the cab drives itself
   if (!car.wp) nextWaypoint(car, world.rng);
   const dx = car.wp.x - car.x;
   const dy = car.wp.y - car.y;
@@ -117,7 +127,7 @@ export function updateTrafficCar(world, car, dt) {
 
 // --- Pedestrians: walk the sidewalks, flee gunfire, cars and chases.
 export function updatePed(world, ped, dt) {
-  if (ped.state === 'down' || ped.state === 'riding') return;
+  if (ped.state === 'down') return;
   const player = world.player;
   const dangerX = player.inCar ? player.car.x : player.x;
   const dangerY = player.inCar ? player.car.y : player.y;

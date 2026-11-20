@@ -2,7 +2,9 @@
 // Each scene sets up a real game state through the game's own rules (entering
 // a car, raising the wanted level, starting a mission) and then plays it
 // forward with a scripted autopilot, so the frame is what a short session
-// really looks like — and the same seed always gives the same frame.
+// really looks like — and the same seed always gives the same frame. Each
+// scene also sets the sky: the chase runs at dusk under the police heli, the
+// street in the rain, the heist at night, the beach at dawn.
 import { PLACES } from './config.js';
 import { makeCar, makePed } from './entities.js';
 import { enterCar } from './player.js';
@@ -71,8 +73,8 @@ function walkToward(input, world, tx, ty) {
   input.keys.add('ShiftLeft');
 }
 
-function putPlayerInCar(world, x, y, color) {
-  const car = makeCar(x, y, 0, { type: 'parked', color, rng: world.rng, id: world.nextId() });
+function putPlayerInCar(world, x, y, color, model) {
+  const car = makeCar(x, y, 0, { type: 'parked', color, model: model || 'sedan', rng: world.rng, id: world.nextId() });
   car.driver = false;
   world.cars.push(car);
   world.player.x = x;
@@ -88,16 +90,18 @@ function runSteps(world, input, seconds, mouseWorld) {
   }
 }
 
-// 1 — a police chase: the player tears down Bayfront Ave in a red Comet
-// with police cars on the bumper and wanted stars, on the way to Rosa's
-// garage with the car they just stole (mission 1, stage 2).
+// 1 — a police chase at dusk: the player tears down Bayfront Ave in a red
+// Comet with police cars on the bumper, three wanted stars and the helicopter
+// overhead, on the way to Rosa's garage with the car they just stole
+// (mission 1, stage 2).
 function stageChase(world) {
   const input = scriptedInput();
+  world.sky.setTime(18.5, 'clear'); // dusk: long light, neon starting to glow
   world.missions.start(0);
   world.dialog = null; // skip the intro card for the screenshot
   world.player.x = 1300;
   world.player.y = 1000;
-  const car = putPlayerInCar(world, 1300, 1000, '#d94f3d');
+  const car = putPlayerInCar(world, 1300, 1000, '#d94f3d', 'comet');
   car.angle = 0;
   world.addWanted(60, 'chase');
   runSteps(world, input, 1.0);
@@ -113,9 +117,11 @@ function stageChase(world) {
   return { screen: 'play' };
 }
 
-// 2 — on foot downtown: traffic, pedestrians, a police car cruising past.
+// 2 — on foot downtown in the rain: traffic, pedestrians, a taxi cruising
+// past, a police car on the corner.
 function stageStreet(world) {
   const input = scriptedInput();
+  world.sky.setTime(15.0, 'rain'); // afternoon rain on the sidewalks
   world.player.x = 800;
   world.player.y = 600;
   world.player.angle = 0;
@@ -132,10 +138,12 @@ function stageStreet(world) {
   return { screen: 'play' };
 }
 
-// 3 — the big score in progress: the armored van is stopped and smoking,
-// the cash is on the street, four wanted stars, cops closing in.
+// 3 — the big score at night: the armored van is stopped and smoking, the
+// cash is on the street, four wanted stars, cops closing in under the
+// streetlights.
 function stageHeist(world) {
   const input = scriptedInput();
+  world.sky.setTime(21.5, 'clear'); // night: dark streets, lit windows
   world.missions.start(4);
   world.dialog = null; // skip the intro card for the screenshot
   // Stage 1 (go to the bank) completes by standing at the bank.
@@ -148,7 +156,7 @@ function stageHeist(world) {
   // and the van ends up behind, brake to a crawl first, then turn around
   // on the road; turning at speed is what wedges a car into a building.
   const van = world.missions.van;
-  const car = putPlayerInCar(world, van.x - 260, 1000, '#3d7bd9');
+  const car = putPlayerInCar(world, van.x - 260, 1000, '#3d7bd9', 'sedan');
   car.angle = 0;
   let guard = 0;
   let lastX = car.x;
@@ -213,10 +221,12 @@ function stageHeist(world) {
   return { screen: 'play' };
 }
 
-// 4 — a golden drive down Ocean Drive: beach, palms, hotels, the ocean.
+// 4 — a golden drive down Ocean Drive at dawn: beach, palms, hotels, the
+// ocean, the Marina's boats, and the first light on the water.
 function stageBeach(world) {
   const input = scriptedInput();
-  const car = putPlayerInCar(world, 2900, 2320, '#f28c28');
+  world.sky.setTime(6.5, 'clear'); // dawn over the Marina
+  const car = putPlayerInCar(world, 2900, 2320, '#f28c28', 'hatch');
   car.angle = Math.PI; // westbound, along the beach
   for (let s = 0; s < 4; s += 1) {
     for (let i = 0; i < 60; i += 1) {

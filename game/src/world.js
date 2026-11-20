@@ -1,7 +1,8 @@
 // The world: everything the game simulates each step — the player, traffic,
-// pedestrians, police, the wanted level, missions, pickups and the camera.
+// pedestrians, police, the helicopter, the taxi rides, the sky and its
+// weather, the wanted level, missions, pickups and the camera.
 // main.js only runs the loop and draws; this file decides what happens.
-import { WORLD, PLACES, PARK, TUNE } from './config.js';
+import { WORLD, PLACES, PARK, TUNE, districtAt } from './config.js';
 import { buildCity, randomRoadPoint } from './city.js';
 import { mulberry32, range, rangeInt, pick } from './random.js';
 import { makePlayer, updatePlayer, exitCar } from './player.js';
@@ -9,13 +10,12 @@ import {
   makeCar, makePed, updateTrafficCar, updatePed, updatePoliceCar, updateCop,
   spawnPoliceCar, spawnCop, policeTargetCount, damageCar, updateParticles,
 } from './entities.js';
-import { MissionManager, MISSIONS } from './missions.js';
+import { MissionManager, MISSIONS as MISSION_DEFS } from './missions.js';
 import { AudioEngine } from './audio.js';
 import { loadSave, writeSave } from './save.js';
-import { SkyClock } from './daynight.js';
-import { PoliceHeli } from './helicopter.js';
-import { TaxiJob } from './taxi.js';
-import { VEHICLE_MODELS, randomModel } from './vehicles.js';
+import { Sky } from './daynight.js';
+import { spawnHeli, updateHeli, heliTargetCount } from './helicopter.js';
+import { updateRide } from './taxi.js';
 
 let idCounter = 1;
 
@@ -25,9 +25,11 @@ export class World {
     this.rng = mulberry32(seed);
     this.city = buildCity(seed);
     this.audio = new AudioEngine();
+    this.sky = new Sky();
     this.player = makePlayer(PLACES.playerSpawn.x, PLACES.playerSpawn.y);
     this.cars = [];
     this.peds = [];
+    this.helis = [];
     this.particles = [];
     this.tracers = [];
     this.events = [];
@@ -41,9 +43,6 @@ export class World {
     this.missions = new MissionManager(this);
     this.missionsDoneCount = 0;
     this.nextMissionAt = null;
-    this.sky = new SkyClock();
-    this.heli = new PoliceHeli();
-    this.taxi = new TaxiJob();
     this.shopOwnedPistol = false;
     this.dialog = null;
     this.banner = null;
@@ -52,6 +51,9 @@ export class World {
     this.playerSpeed = 0;
     this.cashTimer = 20;
     this.shopPrompt = null;
+    this.taxiRide = null;
+    this.taxiFaresPaid = 0;
+    this.district = districtAt(this.player.x, this.player.y);
     this.saved = loadSave();
     this.spawnInitial();
   }
@@ -66,11 +68,12 @@ export class World {
     this.player.health = data.health || TUNE.maxHealth;
     this.missionsDoneCount = data.missionsDone || 0;
     this.shopOwnedPistol = data.weapon === 'pistol';
+    this.taxiFaresPaid = data.taxiFaresPaid || 0;
     this.player.x = data.x ?? this.player.x;
     this.player.y = data.y ?? this.player.y;
     this.camera.x = this.player.x;
     this.camera.y = this.player.y;
-    if (this.missionsDoneCount > 0 && this.missionsDoneCount < MISSIONS.length) {
+    if (this.missionsDoneCount > 0 && this.missionsDoneCount < MISSION_DEFS.length) {
       this.nextMissionAt = { x: PLACES.rosaGarage.x, y: PLACES.rosaGarage.y };
     }
   }
@@ -86,16 +89,13 @@ export class World {
       [650, 2200, 0], [3050, 2200, 0], [800, 1400, Math.PI], [2300, 1400, 0],
       [2600, 1800, 0], [1050, 2200, Math.PI],
     ];
-    for (const [i, [x, y, a]] of spots.entries()) {
-      // Parked cars are dealt the six vehicle models in turn, so every model
-      // is sitting somewhere in the city from the start.
-      const car = makeCar(x, y, a, {
-        type: 'parked', rng: this.rng, id: this.nextId(),
-        model: VEHICLE_MODELS[i % VEHICLE_MODELS.length].id,
-      });
+    for (const [x, y, a] of spots) {
+      const car = makeCar(x, y, a, { type: 'parked', rng: this.rng, id: this.nextId() });
       car.driver = false;
       this.cars.push(car);
     }
+    // Two taxis cruise from the start, so a fare is never far away.
+    for (let i = 0; i < 2; i += 1) this.spawnTaxiCar();
     for (let i = 0; i < 10; i += 1) this.spawnTrafficCar();
     for (let i = 0; i < 14; i += 1) this.spawnPed();
   }
@@ -104,7 +104,16 @@ export class World {
     const p = randomRoadPoint(this.rng);
     const car = makeCar(p.x, p.y, p.horizontal ? 0 : Math.PI / 2, {
       type: 'traffic', rng: this.rng, id: this.nextId(),
-      model: randomModel(this.rng).id,
+    });
+    car.dir = p.horizontal ? 0 : 1;
+    this.cars.push(car);
+    return car;
+  }
+
+  spawnTaxiCar() {
+    const p = randomRoadPoint(this.rng);
+    const car = makeCar(p.x, p.y, p.horizontal ? 0 : Math.PI / 2, {
+      type: 'taxi', model: 'taxi', color: '#f2c14e', rng: this.rng, id: this.nextId(),
     });
     car.dir = p.horizontal ? 0 : 1;
     this.cars.push(car);
@@ -192,6 +201,8 @@ export class World {
     p.car = null;
     this.setWanted(0);
     this.over = null;
+    this.helis = [];
+    this.taxiRide = null;
     // Clear the police that were on the player.
     this.cars = this.cars.filter((c) => c.type !== 'police');
     this.peds = this.peds.filter((pd) => pd.state !== 'cop');
@@ -202,10 +213,10 @@ export class World {
   step(dt, input, mouseWorld) {
     if (this.dialog || this.over) return; // dialogs and game-over pause the world
     this.time += dt;
-    this.sky.update(dt, this.rng);
-    this.heli.update(this, dt);
     this.gunshotTimer = Math.max(0, this.gunshotTimer - dt);
     this.skidTimer = Math.max(0, this.skidTimer - dt);
+    this.sky.update(dt, this.rng);
+    this.district = districtAt(this.player.x, this.player.y);
 
     // Start the first job by walking into Rosa's garage.
     if (!this.missions.active && this.missionsDoneCount === 0 && this.missions.current === -1) {
@@ -229,7 +240,7 @@ export class World {
 
     updatePlayer(this, dt, input, mouseWorld);
     this.playerSpeed = this.player.speed;
-    this.taxi.update(this, dt, input);
+    if (this.taxiRide) updateRide(this, dt);
 
     // The armored van runs its route until it is stopped. Its driver steers
     // back onto Bayfront Ave after being shoved off it by a ram.
@@ -253,7 +264,7 @@ export class World {
 
     for (const car of [...this.cars]) {
       if (car.dead) continue;
-      if (car.type === 'traffic') updateTrafficCar(this, car, dt);
+      if (car.type === 'traffic' || car.type === 'taxi') updateTrafficCar(this, car, dt);
       else if (car.type === 'police') updatePoliceCar(this, car, dt);
       if (car.smoking && Math.random() < dt * 6) {
         this.particles.push({
@@ -268,6 +279,12 @@ export class World {
       else if (ped.state === 'gang') this.updateGang(ped, dt);
       else updatePed(this, ped, dt);
     }
+
+    // The police helicopter: one eye in the sky from three stars up, gone
+    // when the heat dies down.
+    if (this.helis.length < heliTargetCount(this.wanted)) spawnHeli(this);
+    if (this.wanted === 0) this.helis = [];
+    for (const heli of this.helis) updateHeli(this, heli, dt);
 
     this.maintainPopulation();
     this.updateWanted(dt);
@@ -286,8 +303,10 @@ export class World {
     this.camera.y += (ty - this.camera.y) * Math.min(1, dt * 5);
 
     // Sound follows the action.
-    this.audio.setEngine(this.player.inCar ? Math.abs(this.player.car.speed) / TUNE.carMaxSpeed : 0);
+    const top = this.player.inCar && this.player.car ? (this.player.car.topSpeed || 420) : 420;
+    this.audio.setEngine(this.player.inCar ? Math.abs(this.player.car.speed) / top : 0);
     this.audio.setSiren(this.wanted > 0 && this.cars.some((c) => c.type === 'police' && !c.dead));
+    this.audio.setRotor(this.helis.length > 0);
 
     // Drain one-shot events into banners.
     for (const ev of this.events) {
@@ -322,11 +341,15 @@ export class World {
   maintainPopulation() {
     const p = this.player;
     // Traffic: about 14 cars near the player.
-    const traffic = this.cars.filter((c) => c.type === 'traffic' && !c.dead);
-    if (traffic.length < 12) this.spawnTrafficCar();
+    const traffic = this.cars.filter((c) => (c.type === 'traffic' || c.type === 'taxi') && !c.dead);
+    if (traffic.length < 12) {
+      // One in eight fresh cars is a taxi, so the streets always have cabs.
+      if (this.rng() < 0.125) this.spawnTaxiCar();
+      else this.spawnTrafficCar();
+    }
     this.cars = this.cars.filter((c) => {
       if (c.dead && c.type !== 'van') return Math.hypot(c.x - p.x, c.y - p.y) < 1400;
-      if (c.type === 'traffic' && Math.hypot(c.x - p.x, c.y - p.y) > 1400) return false;
+      if ((c.type === 'traffic' || c.type === 'taxi') && Math.hypot(c.x - p.x, c.y - p.y) > 1400) return false;
       return true;
     });
     // Pedestrians: about 18 near the player.
@@ -424,6 +447,7 @@ export class World {
       health: this.player.health,
       x: this.player.x,
       y: this.player.y,
+      taxiFaresPaid: this.taxiFaresPaid,
     });
   }
 }

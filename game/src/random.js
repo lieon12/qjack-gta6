@@ -1,5 +1,7 @@
 // Seeded random numbers (mulberry32) so the city and every screenshot scene
-// are the same on every run with the same seed.
+// are the same on every run with the same seed. The world keeps one rng and
+// hands it to everything that needs a roll; Math.random is only for cosmetic
+// things like particles, never for anything the screenshots depend on.
 export function mulberry32(seed) {
   let a = seed >>> 0;
   return function next() {
@@ -20,4 +22,9 @@ export function range(rng, min, max) {
 
 export function rangeInt(rng, min, max) {
   return min + Math.floor(rng() * (max - min + 1));
+}
+
+// True with probability p (0..1) on the seeded rng.
+export function chance(rng, p) {
+  return rng() < p;
 }

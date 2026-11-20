@@ -1,10 +1,12 @@
 // The player: Danny Vega, on foot and behind the wheel.
 // On foot: WASD to move, Shift to sprint, Space to punch, F / click to shoot,
-// E to steal or enter a car. In a car: W/S to drive, A/D to steer, Space to brake.
+// E to steal or enter a car, T to hail a taxi. In a car: W/S to drive, A/D to
+// steer, Space to brake. How a car drives comes from its model, not from a
+// single set of numbers — a Comet GT and a Limo feel nothing alike.
 import { WORLD, TUNE, PLACES } from './config.js';
 import { collideCircle } from './city.js';
 import { spawnParticles, damageCar } from './entities.js';
-import { modelStats } from './vehicles.js';
+import { findTaxi, startRide, finishRide } from './taxi.js';
 
 export function makePlayer(x, y) {
   return {
@@ -42,6 +44,14 @@ export function updatePlayer(world, dt, input, mouseWorld) {
   p.punchCooldown -= dt;
   p.shootCooldown -= dt;
 
+  // Riding in a taxi as a passenger: the cab drives, the player just rides.
+  // E gets out early (and pays the meter so far); nothing else is needed.
+  if (world.taxiRide && world.taxiRide.state === 'ride' && p.car === world.taxiRide.taxi) {
+    if (input.pressed('KeyE')) finishRide(world, true);
+    p.speed = Math.abs(p.car.speed);
+    return;
+  }
+
   if (p.inCar) {
     updateDriving(world, dt, input);
     return;
@@ -68,6 +78,16 @@ export function updatePlayer(world, dt, input, mouseWorld) {
     if (car) enterCar(world, car);
   }
 
+  // T: hail the nearest taxi, if one is cruising close by.
+  if (input.pressed('KeyT') && !world.taxiRide) {
+    const taxi = findTaxi(world, p.x, p.y);
+    if (taxi) {
+      startRide(world, taxi);
+    } else {
+      world.events.push({ type: 'banner', text: 'No taxi nearby — wait for a yellow cab', color: '#ffd34e' });
+    }
+  }
+
   // Space: punch whatever is in front of the player.
   if (input.pressed('Space') && p.punchCooldown <= 0) {
     p.punchCooldown = 0.45;
@@ -89,14 +109,14 @@ function updateDriving(world, dt, input) {
   const p = world.player;
   const car = p.car;
   const mv = input.moveVector();
-  // Each vehicle model drives its own way; rain and storm cut the grip.
-  const stats = modelStats(car);
-  const grip = world.sky ? world.sky.grip() : 1;
-  const topSpeed = stats.top * grip;
   const forward = mv.y < 0 ? 1 : mv.y > 0 ? -0.5 : 0;
   const steering = mv.x;
+  // The car's own model sets how hard it pulls and how fast it goes.
+  const accel = car.accel || TUNE.carAccel;
+  const top = car.topSpeed || TUNE.carMaxSpeed;
+  const turn = car.turn || TUNE.carTurn;
   if (forward !== 0) {
-    car.speed += forward * stats.accel * dt;
+    car.speed += forward * accel * dt;
   } else {
     car.speed -= Math.sign(car.speed) * Math.min(Math.abs(car.speed), 240 * dt);
   }
@@ -109,8 +129,8 @@ function updateDriving(world, dt, input) {
       });
     }
   }
-  car.speed = Math.max(-TUNE.carReverseMax, Math.min(topSpeed, car.speed));
-  const turnRate = stats.turn * Math.min(1, Math.abs(car.speed) / 140) * Math.sign(car.speed || 1);
+  car.speed = Math.max(-TUNE.carReverseMax, Math.min(top, car.speed));
+  const turnRate = turn * Math.min(1, Math.abs(car.speed) / 140) * Math.sign(car.speed || 1);
   car.angle += steering * turnRate * dt;
   const prevX = car.x;
   const prevY = car.y;
@@ -179,12 +199,16 @@ export function enterCar(world, car) {
     world.events.push({ type: 'banner', text: 'Car stolen — the law is watching', color: '#ff9d4e' });
     world.audio.wantedUp();
   }
+  if (car.type === 'taxi') {
+    // Taking a taxi by force is still a carjacking — the meter does not run.
+    car.driver = false;
+    world.addWanted(20, 'taxi stolen');
+    world.events.push({ type: 'banner', text: 'Taxi stolen — the law is watching', color: '#ff9d4e' });
+    world.audio.wantedUp();
+  }
   p.inCar = car;
   p.car = car;
   car.type = car.type === 'police' ? 'police' : 'player';
-  if (car.model === 'taxi') {
-    world.events.push({ type: 'banner', text: 'Taxi — press T near a pedestrian to pick them up', color: '#ffd34e' });
-  }
   world.audio.ensure();
 }
 

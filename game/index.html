@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Solmar Bay — Open World Crime</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1420; }
@@ -11,7 +12,10 @@
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Solmar Bay: an open-world crime game. Steal cars, lose the cops, run jobs for Mama Rosa."></canvas>
+<!-- Solmar Bay: one canvas, one module script, no network. Day and night turn
+     over the city, rain comes and goes, taxis run for fares, and a police
+     helicopter joins the chase from three wanted stars. -->
+<canvas id="game" aria-label="Solmar Bay: an open-world crime game. Steal cars, hail taxis, lose the cops and the helicopter, run eight jobs for Mama Rosa from the Strip to the Marina."></canvas>
 <p id="status" role="status" aria-live="polite"></p>
 <script type="module" src="./src/main.js"></script>
 </body>

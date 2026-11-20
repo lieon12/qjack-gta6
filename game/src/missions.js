@@ -1,8 +1,9 @@
 // The story: Danny Vega, new in Solmar Bay, works jobs for Mama Rosa while
 // Los Tiburones push back. Eight missions, each a chain of small objectives
 // the world checks every step: reach a place, steal a car, take someone down,
-// lose the cops. Missions 6-8 are the "Tiburón Rising" arc: the gang takes
-// the Strip, the Casino pays, and El Tiburón waits at the Marina.
+// lose the cops. The first five are Rosa's jobs around town; the last three
+// are the "Tiburón Rising" arc — the Strip, the Marina, and El Tiburón
+// himself, the shark who wants the city back.
 import { PLACES, TUNE } from './config.js';
 import { makeCar, makePed } from './entities.js';
 
@@ -47,7 +48,7 @@ export const MISSIONS = [
     reward: 800,
     stages: [
       { type: 'goto', x: PLACES.park.x, y: PLACES.park.y, r: 140, text: 'Go to Central Park' },
-      { type: 'kill', count: 3, text: 'Take down the Tiburones enforcers (0/3)' },
+      { type: 'kill', count: 3, x: PLACES.park.x, y: PLACES.park.y, text: 'Take down the Tiburones enforcers (0/3)' },
     ],
   },
   {
@@ -83,50 +84,57 @@ export const MISSIONS = [
     ],
   },
   {
-    name: 'Tiburón Rising',
+    name: 'Strip Lights',
     giver: 'Mama Rosa',
     intro: [
-      'Mama Rosa: "Los Tiburones are done hiding, Danny. They took the Strip',
-      'last night — neon, music, all of it — and they mean to take the',
-      'Casino next. Go down there and take the Strip back."',
-      'Clear the Strip of Tiburones enforcers, then hold the Casino door.',
-    ],
-    reward: 1200,
-    stages: [
-      { type: 'goto', x: PLACES.strip.x, y: PLACES.strip.y, r: 120, text: 'Go to the Strip' },
-      { type: 'kill', count: 4, x: PLACES.strip.x, y: PLACES.strip.y, text: 'Take down the Tiburones enforcers (0/4)' },
-      { type: 'goto', x: PLACES.casino.x, y: PLACES.casino.y, r: 90, text: 'Hold the Casino door' },
-    ],
-  },
-  {
-    name: 'High Roller',
-    giver: 'Mama Rosa',
-    intro: [
-      'Mama Rosa: "The Casino owes us, Danny, and tonight it pays. A chip',
-      'case is sitting in the back room — walk in, take it, and run. The',
-      'house will call the cops the second you touch it."',
-      'Grab the chip case at Casino Solmar, then lose the cops at the Marina.',
+      'Mama Rosa: "The Strip pays me protection, Danny, and the Tiburones',
+      'have been skimming it. Three of my fronts on the casino row are',
+      'holding cash for me. Walk the Strip, collect it all, and bring it',
+      'home. The neon watches everything — keep it quiet."',
+      'Collect the protection money from the three casino fronts.',
     ],
     reward: 1500,
     stages: [
-      { type: 'pickup', x: PLACES.casino.x, y: PLACES.casino.y, r: 70, text: 'Grab the chip case at Casino Solmar', wantedOnPickup: 60 },
-      { type: 'escape', x: PLACES.marina.x, y: PLACES.marina.y, r: 110, text: 'Escape to the Marina' },
+      { type: 'goto', x: PLACES.casino.x, y: PLACES.casino.y, r: 110, text: 'Go to the Solmar Grand Casino' },
+      { type: 'pickup', x: PLACES.casinoFrontA.x, y: PLACES.casinoFrontA.y, r: 70, text: 'Collect from Neon Slots' },
+      { type: 'pickup', x: PLACES.casinoFrontB.x, y: PLACES.casinoFrontB.y, r: 70, text: 'Collect from Lucky Pelican' },
+      { type: 'pickup', x: PLACES.casinoFrontC.x, y: PLACES.casinoFrontC.y, r: 70, text: 'Collect from Golden Marlin Club' },
+      { type: 'goto', x: PLACES.rosaGarage.x, y: PLACES.rosaGarage.y, r: 90, text: "Bring the take back to Rosa's Garage" },
     ],
   },
   {
-    name: 'Harbor Lights',
+    name: 'Marina Run',
     giver: 'Mama Rosa',
     intro: [
-      'Mama Rosa: "It ends tonight, Danny. El Tiburón himself is waiting at',
-      'the Marina with what is left of his crew, thinking the water has',
-      'his back. Show him it does not. Then come home."',
-      'Face El Tiburón at the Marina, then escape to the hideout.',
+      'Mama Rosa: "A crate came in on the night boat, Danny, and it is',
+      'sitting on the Marina pier with my name on it. The Tiburones know',
+      'it too. Grab it, run it to Pier 7 before their boat leaves, and',
+      'do not let them catch you holding it."',
+      'Grab the crate at the Marina pier, deliver it to Pier 7 in time.',
     ],
-    reward: 3000,
+    reward: 1800,
     stages: [
-      { type: 'goto', x: PLACES.marina.x, y: PLACES.marina.y, r: 120, text: 'Go to the Marina' },
-      { type: 'kill', count: 1, x: PLACES.marina.x, y: PLACES.marina.y, boss: true, text: 'Take down El Tiburón (0/1)' },
-      { type: 'escape', x: PLACES.hideout.x, y: PLACES.hideout.y, r: 90, text: 'Escape to the hideout' },
+      { type: 'goto', x: PLACES.marina.x, y: PLACES.marina.y, r: 110, text: 'Go to the Solmar Marina' },
+      { type: 'pickup', x: PLACES.marinaPier.x, y: PLACES.marinaPier.y, r: 70, text: 'Grab the crate on the pier', wanted: 40 },
+      { type: 'goto', x: PLACES.docksPickup.x, y: PLACES.docksPickup.y, r: 90, text: 'Deliver to Pier 7 before the boat leaves', timer: 75 },
+      { type: 'escape', x: PLACES.hideout.x, y: PLACES.hideout.y, r: 90, text: 'Lose the heat — reach the hideout' },
+    ],
+  },
+  {
+    name: 'Tiburón Rising',
+    giver: 'Mama Rosa',
+    intro: [
+      'Mama Rosa: "El Tiburón himself is on the Strip tonight, Danny,',
+      'with his whole crew, telling the casinos the city is his now.',
+      'End it. Take down his crew and take down the shark, and Solmar',
+      'Bay is ours for good. Come back alive, hijo."',
+      'Take down El Tiburón and his 4 enforcers on the Strip, then vanish.',
+    ],
+    reward: 4000,
+    stages: [
+      { type: 'goto', x: PLACES.casino.x, y: PLACES.casino.y, r: 140, text: 'Go to the Strip — El Tiburón is there' },
+      { type: 'kill', count: 5, x: PLACES.casino.x, y: PLACES.casino.y, boss: true, text: 'Take down El Tiburón and his crew (0/5)' },
+      { type: 'escape', x: PLACES.hideout.x, y: PLACES.hideout.y, r: 90, text: 'Vanish — reach the hideout' },
     ],
   },
 ];
@@ -174,7 +182,7 @@ export class MissionManager {
     if (!stage) return;
     if (stage.type === 'stealCar' && !this.getaway) {
       const car = makeCar(stage.x, stage.y, 0, {
-        type: 'parked', color: '#f2c14e', rng: world.rng, id: world.nextId(),
+        type: 'parked', model: 'comet', color: '#f2c14e', rng: world.rng, id: world.nextId(),
       });
       car.driver = false;
       car.getaway = true;
@@ -182,24 +190,28 @@ export class MissionManager {
       this.getaway = car;
     }
     if (stage.type === 'kill' && this.gang.length === 0) {
-      // Gang members spawn at the stage's own spot (the Strip, the Marina),
-      // or in Central Park when the stage names no spot.
-      const gx = stage.x ?? PLACES.park.x;
-      const gy = stage.y ?? PLACES.park.y;
+      const cx = stage.x ?? PLACES.park.x;
+      const cy = stage.y ?? PLACES.park.y;
       for (let i = 0; i < stage.count; i += 1) {
-        const ped = makePed(gx + (i - 1) * 70, gy + (i % 2) * 60 - 30, {
+        const ped = makePed(cx + (i - Math.floor(stage.count / 2)) * 70, cy + (i % 2) * 60 - 30, {
           rng: world.rng, id: world.nextId(),
         });
         ped.state = 'gang';
-        ped.health = stage.boss ? 160 : 60;
-        ped.boss = !!stage.boss;
-        ped.color = stage.boss ? '#ffd34e' : '#2b4d6f';
+        // The last one in a boss fight is El Tiburón himself: twice the
+        // health and a dark red jacket, so the player knows who he is.
+        if (stage.boss && i === stage.count - 1) {
+          ped.health = 120;
+          ped.color = '#7a1f1f';
+        } else {
+          ped.health = 60;
+          ped.color = '#2b4d6f';
+        }
         world.peds.push(ped);
         this.gang.push(ped);
       }
     }
     if (stage.type === 'ram' && !this.van) {
-      const van = makeCar(400, 1000, 0, { type: 'van', model: 'hauler', color: '#3d3a38', rng: world.rng, id: world.nextId() });
+      const van = makeCar(400, 1000, 0, { type: 'van', model: 'pickup', color: '#3d3a38', rng: world.rng, id: world.nextId() });
       van.health = 80;
       van.maxHealth = 80;
       van.speed = 110;
@@ -262,7 +274,9 @@ export class MissionManager {
     if (!this.active || !this.stage || this.stage.type !== 'kill') return;
     this.kills += 1;
     const stage = this.stage;
-    stage.text = `Take down the Tiburones enforcers (${this.kills}/${stage.count})`;
+    stage.text = stage.boss
+      ? `Take down El Tiburón and his crew (${this.kills}/${stage.count})`
+      : `Take down the Tiburones enforcers (${this.kills}/${stage.count})`;
     if (this.kills >= stage.count) this.advance();
   }
 
@@ -326,9 +340,10 @@ export class MissionManager {
         const d = Math.hypot(px - tx, py - ty);
         if (d < s.r) {
           world.audio.pickup();
-          if (s.wantedOnPickup) {
-            world.addWanted(s.wantedOnPickup, 'job gone loud');
-            world.events.push({ type: 'banner', text: 'The house called the cops — run!', color: '#ff5a4e' });
+          // Some pickups are hot: grabbing the Marina crate brings the law.
+          if (s.wanted) {
+            world.addWanted(s.wanted, 'crate grabbed');
+            world.events.push({ type: 'banner', text: 'They saw you take it — run!', color: '#ff5a4e' });
           }
           this.advance();
         }

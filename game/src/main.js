@@ -1,6 +1,7 @@
 // Solmar Bay — bootstrap and the game loop.
 // Screens: title -> play -> pause / game-over. A ?shot= URL stages one
-// screenshot scene instead of showing the title screen.
+// screenshot scene instead of showing the title screen. While the title
+// waits, the sky keeps turning, so the palms shimmer and the clock moves.
 import { World } from './world.js';
 import { Input } from './input.js';
 import { drawWorld } from './render.js';
@@ -44,7 +45,10 @@ if (shotName) {
 function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  world.time += screen === 'title' ? dt : 0; // title palms shimmer while waiting
+  if (screen === 'title') {
+    world.time += dt; // title palms shimmer while waiting
+    world.sky.update(dt * 0.5, world.rng); // and the sky turns behind the menu
+  }
 
   if (screen === 'title') {
     if (input.pressed('Enter')) {

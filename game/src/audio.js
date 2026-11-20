@@ -1,5 +1,6 @@
 // All sound is synthesised with WebAudio — no audio files, no network.
-// Engine hum, sirens, gunshots, punches, pickups and a low-key music loop.
+// Engine hum, police sirens, the helicopter's rotor thump, gunshots,
+// punches, pickups and a low-key music loop.
 export class AudioEngine {
   constructor() {
     this.ctx = null;
@@ -8,6 +9,8 @@ export class AudioEngine {
     this._engineGain = null;
     this._sirenOsc = null;
     this._sirenGain = null;
+    this._rotorOsc = null;
+    this._rotorGain = null;
     this._musicTimer = null;
     this._musicStep = 0;
   }
@@ -40,6 +43,17 @@ export class AudioEngine {
       this._sirenGain.gain.value = 0;
       this._sirenOsc.connect(this._sirenGain).connect(this.ctx.destination);
       this._sirenOsc.start();
+      // Helicopter rotor: a slow square-wave thump, felt more than heard.
+      this._rotorOsc = this.ctx.createOscillator();
+      this._rotorOsc.type = 'square';
+      this._rotorOsc.frequency.value = 13;
+      const rlp = this.ctx.createBiquadFilter();
+      rlp.type = 'lowpass';
+      rlp.frequency.value = 120;
+      this._rotorGain = this.ctx.createGain();
+      this._rotorGain.gain.value = 0;
+      this._rotorOsc.connect(rlp).connect(this._rotorGain).connect(this.ctx.destination);
+      this._rotorOsc.start();
       this._startMusic();
     } catch {
       this.ctx = null;
@@ -56,6 +70,11 @@ export class AudioEngine {
     if (!this.ctx || !this._sirenGain) return;
     this._sirenGain.gain.setTargetAtTime(on ? 0.035 : 0, this.ctx.currentTime, 0.2);
     if (on) this._sirenOsc.frequency.setTargetAtTime(700 + Math.sin(this.ctx.currentTime * 4) * 180, this.ctx.currentTime, 0.05);
+  }
+
+  setRotor(on) {
+    if (!this.ctx || !this._rotorGain) return;
+    this._rotorGain.gain.setTargetAtTime(on ? 0.05 : 0, this.ctx.currentTime, 0.3);
   }
 
   _blip(freq, dur, type = 'sine', vol = 0.08) {
